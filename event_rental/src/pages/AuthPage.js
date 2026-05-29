@@ -38,14 +38,46 @@ export default function AuthPage() {
     }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    alert(
-      isSignUp
-        ? `Đăng ký demo: ${form.email}`
-        : `Đăng nhập demo: ${form.email}`
-    );
-  };
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (isSignUp) {
+    // Đăng ký
+    const res = await fetch("https://plongg200614.pythonanywhere.com/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.email,
+        password: form.password
+      })
+    });
+    const result = await res.json();
+    if (result.success) {
+      alert("Đăng ký thành công! Vui lòng đăng nhập.");
+      setIsSignUp(false);
+    } else {
+      alert(result.message);
+    }
+
+  } else {
+    // Đăng nhập
+    const res = await fetch("https://plongg200614.pythonanywhere.com/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.email,
+        password: form.password
+      })
+    });
+    const result = await res.json();
+    if (result.success) {
+      localStorage.setItem("username", form.email);
+      window.location.href = "/"; // ← chuyển về trang chủ
+    } else {
+      alert(result.message);
+    }
+  }
+};
 
   return (
     <div className="auth-page">

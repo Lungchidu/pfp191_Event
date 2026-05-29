@@ -1,11 +1,12 @@
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 import sqlite3
 import bcrypt
 import os
 
 app = Flask(__name__)
+CORS(app)  # ← chỉ 1 lần duy nhất
 
-# Absolute path so it works regardless of working directory
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
 
 def init_db():
@@ -19,7 +20,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Call at import time — runs whether started via WSGI or directly
 init_db()
 
 def get_db():
