@@ -1,3 +1,11 @@
+HOW TO USE TUTORIAL
+
+1. Run in terminal
+2. npm install
+3. cd LoginandRegister
+pip install -r requirements.txt
+4. npm start
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
