@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ShoppingCart } from "lucide-react";
+import { POPULAR_SEARCHES } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
-import { logout } from "../../config/auth";
+import { logout, USER_KEY } from "../../config/auth";
 
 export default function Header({ t, lang, onLangChange }) {
-  const { ui, username, filters, search, cartCount } = useApp();
+  const { filters, search, cartCount } = useApp();
   const [input, setInput] = useState(filters.query);
-  const popularSearches = ui?.popularSearches || [];
+  const [username, setUsername] = useState(
+    () => localStorage.getItem(USER_KEY) || ""
+  );
 
   useEffect(() => {
     setInput(filters.query);
@@ -18,8 +21,8 @@ export default function Header({ t, lang, onLangChange }) {
     search(input);
   };
 
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    logout();
   };
 
   return (
@@ -132,7 +135,7 @@ export default function Header({ t, lang, onLangChange }) {
                 <button type="submit">{t.searchBtn}</button>
               </form>
               <div className="search-tags">
-                {popularSearches.map((term) => (
+                {POPULAR_SEARCHES.map((term) => (
                   <span
                     key={term}
                     role="button"

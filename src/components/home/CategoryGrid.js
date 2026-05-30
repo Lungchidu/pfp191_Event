@@ -1,8 +1,9 @@
+import { CATEGORIES } from "../../data/mockData";
 import { DynamicIcon } from "../IconMap";
 import { useApp } from "../../context/AppContext";
 
 export default function CategoryGrid({ title }) {
-  const { categories, filters, filterByCategory, clearFilters } = useApp();
+  const { filters, filterByCategory, clearFilters } = useApp();
 
   return (
     <section className="container section-card">
@@ -17,7 +18,7 @@ export default function CategoryGrid({ title }) {
         </button>
       </div>
       <div className="category-grid">
-        {categories.map((cat) => (
+        {CATEGORIES.map((cat) => (
           <button
             key={cat.id}
             type="button"

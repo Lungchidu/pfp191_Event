@@ -5,8 +5,8 @@ import ProductPage from "./pages/ProductPage";
 import CartPage from "./pages/CartPage";
 import Toast from "./components/Toast";
 import ProtectedRoute from "./components/ProtectedRoute";
-import RedirectToAuth from "./components/RedirectToAuth";
 import { saveUserFromUrl } from "./config/auth";
+import RedirectToAuth from "./components/RedirectToAuth";
 
 export default function App() {
   useEffect(() => {

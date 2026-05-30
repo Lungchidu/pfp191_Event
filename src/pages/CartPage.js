@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react";
-import { formatPrice } from "../utils/formatPrice";
+import { formatPrice } from "../data/mockData";
 import { useApp } from "../context/AppContext";
 import "../styles/cart.css";
 
@@ -10,12 +10,14 @@ export default function CartPage() {
     cartTotal,
     updateCartItem,
     removeFromCart,
-    checkout,
+    showToast,
   } = useApp();
 
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (cart.length === 0) return;
-    await checkout();
+    showToast(
+      "Đặt thuê thành công (demo)! Backend sẽ xử lý đơn hàng sau."
+    );
   };
 
   return (

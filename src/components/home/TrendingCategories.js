@@ -1,17 +1,17 @@
+import { TRENDING } from "../../data/mockData";
 import { DynamicIcon } from "../IconMap";
 import { useApp } from "../../context/AppContext";
 
 export default function TrendingCategories({ title }) {
-  const { ui, filterByKeyword } = useApp();
-  const trending = ui?.trending || [];
-
-  if (trending.length === 0) return null;
+  const { filterByKeyword } = useApp();
 
   return (
     <section className="container section-card">
-      <h2 className="section-card__title">{title}</h2>
+      <div className="section-card__header">
+        <h2 className="section-card__title">{title}</h2>
+      </div>
       <div className="trending-row">
-        {trending.map((item) => (
+        {TRENDING.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -22,7 +22,7 @@ export default function TrendingCategories({ title }) {
               <DynamicIcon name={item.icon} />
             </div>
             <h4>{item.name}</h4>
-            <p>{item.count}</p>
+            <p>{item.count} sản phẩm</p>
           </button>
         ))}
       </div>
