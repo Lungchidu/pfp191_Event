@@ -10,8 +10,6 @@ const LANG_OPTIONS = [
   { code: "jp", label: "JP JP" },
 ];
 
-const API_URL = "https://logand-register-pfp.onrender.com";
-
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
   const [lang, setLang] = useState("vi");
@@ -22,7 +20,6 @@ export default function AuthPage() {
   useEffect(() => {
     setIsSignUp(searchParams.get("mode") !== "login");
   }, [searchParams]);
-
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
@@ -42,42 +39,45 @@ export default function AuthPage() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (isSignUp) {
-      const res = await fetch(`${API_URL}/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: form.email,
-          password: form.password,
-        }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        alert("Đăng ký thành công! Vui lòng đăng nhập.");
-        setIsSignUp(false);
-      } else {
-        alert(result.message);
-      }
+  if (isSignUp) {
+    // Đăng ký
+    const res = await fetch("https://logand-register-pfp.onrender.com/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.email,
+        password: form.password
+      })
+    });
+    const result = await res.json();
+    if (result.success) {
+      alert("Đăng ký thành công! Vui lòng đăng nhập.");
+      setIsSignUp(false);
     } else {
-      const res = await fetch(`${API_URL}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: form.email,
-          password: form.password,
-        }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        localStorage.setItem("username", result.username || form.email);
-        window.location.replace("/");
-      } else {
-        alert(result.message);
-      }
+      alert(result.message);
     }
-  };
+
+  } else {
+    // Đăng nhập
+    const res = await fetch("https://logand-register-pfp.onrender.com/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.email,
+        password: form.password
+      })
+    });
+    const result = await res.json();
+    if (result.success) {
+      localStorage.setItem("username", form.email);
+      window.location.href = "/"; // ← chuyển về trang chủ
+    } else {
+      alert(result.message);
+    }
+  }
+};
 
   return (
     <div className="auth-page">
@@ -94,7 +94,9 @@ export default function AuthPage() {
         ))}
       </div>
 
-      <div className={`auth-card ${isSignUp ? "signup-mode" : "login-mode"}`}>
+      <div
+        className={`auth-card ${isSignUp ? "signup-mode" : "login-mode"}`}
+      >
         <div className="auth-form-panel">
           <h1>{isSignUp ? t.signUp : t.signIn}</h1>
 
@@ -139,7 +141,11 @@ export default function AuthPage() {
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label="Toggle password"
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
               </button>
             </div>
 
@@ -166,14 +172,23 @@ export default function AuthPage() {
           <div className="auth-divider">{t.orContinue}</div>
 
           <div className="auth-social">
-            <button type="button" title="Google">G</button>
-            <button type="button" title="Apple">⌘</button>
-            <button type="button" title="Facebook">f</button>
+            <button type="button" title="Google">
+              G
+            </button>
+            <button type="button" title="Apple">
+              ⌘
+            </button>
+            <button type="button" title="Facebook">
+              f
+            </button>
           </div>
 
           <p className="auth-switch-text">
             {isSignUp ? t.haveAccount : t.noAccount}{" "}
-            <button type="button" onClick={() => setIsSignUp((v) => !v)}>
+            <button
+              type="button"
+              onClick={() => setIsSignUp((v) => !v)}
+            >
               {isSignUp ? t.signIn : t.signUp}
             </button>
           </p>
@@ -184,8 +199,12 @@ export default function AuthPage() {
         </div>
 
         <div className="auth-welcome-panel">
-          <h2>{isSignUp ? t.welcomeBack : t.joinUs}</h2>
-          <p>{isSignUp ? t.welcomeDesc : t.joinDesc}</p>
+          <h2>
+            {isSignUp ? t.welcomeBack : t.joinUs}
+          </h2>
+          <p>
+            {isSignUp ? t.welcomeDesc : t.joinDesc}
+          </p>
           <button
             type="button"
             className="auth-panel-btn"

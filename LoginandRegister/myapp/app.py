@@ -5,9 +5,12 @@ import bcrypt
 import os
 
 app = Flask(__name__)
-CORS(app)  # ← chỉ 1 lần duy nhất
+CORS(app)
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
+
+# Trang mua sắm (React event_rental) — đổi khi deploy
+SHOP_URL = os.environ.get("SHOP_URL", "http://localhost:3000")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -59,11 +62,15 @@ def login():
     if not row or not bcrypt.checkpw(password.encode(), row[0].encode()):
         return jsonify({"success": False, "message": "Tài khoản hoặc mật khẩu không đúng!"})
 
-    return jsonify({"success": True, "message": f"Chào mừng {username}!"})
+    return jsonify({
+        "success": True,
+        "message": f"Chào mừng {username}!",
+        "username": username,
+    })
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", shop_url=SHOP_URL)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=10000, debug=False)
