@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
-import { HERO_SLIDES, SIDE_BANNERS } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
 
 export default function HeroSection() {
-  const { updateFilters } = useApp();
+  const { ui, updateFilters } = useApp();
   const [active, setActive] = useState(0);
 
+  const heroSlides = ui?.heroSlides || [];
+  const sideBanners = ui?.sideBanners || [];
+
   useEffect(() => {
+    if (heroSlides.length === 0) return undefined;
     const timer = setInterval(() => {
-      setActive((prev) => (prev + 1) % HERO_SLIDES.length);
+      setActive((prev) => (prev + 1) % heroSlides.length);
     }, 5000);
     return () => clearInterval(timer);
-  }, []);
+  }, [heroSlides.length]);
+
+  if (heroSlides.length === 0) return null;
 
   const applyFilter = (filter) => {
     updateFilters(
@@ -24,7 +29,7 @@ export default function HeroSection() {
     <section className="hero-section container">
       <div className="hero-grid">
         <div className="hero-carousel">
-          {HERO_SLIDES.map((slide, index) => (
+          {heroSlides.map((slide, index) => (
             <div
               key={slide.id}
               className={`hero-carousel__slide ${
@@ -47,7 +52,7 @@ export default function HeroSection() {
             </div>
           ))}
           <div className="hero-carousel__dots">
-            {HERO_SLIDES.map((slide, index) => (
+            {heroSlides.map((slide, index) => (
               <button
                 key={slide.id}
                 type="button"
@@ -60,7 +65,7 @@ export default function HeroSection() {
         </div>
 
         <div className="hero-side">
-          {SIDE_BANNERS.map((banner) => (
+          {sideBanners.map((banner) => (
             <button
               key={banner.id}
               type="button"

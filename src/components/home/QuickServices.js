@@ -1,13 +1,15 @@
-import { QUICK_SERVICES } from "../../data/mockData";
 import { DynamicIcon } from "../IconMap";
 import { useApp } from "../../context/AppContext";
 
 export default function QuickServices() {
-  const { updateFilters } = useApp();
+  const { ui, updateFilters } = useApp();
+  const items = ui?.quickServices || [];
+
+  if (items.length === 0) return null;
 
   return (
     <section className="container quick-services">
-      {QUICK_SERVICES.map((item) => (
+      {items.map((item) => (
         <button
           key={item.id}
           type="button"
