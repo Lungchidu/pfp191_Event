@@ -2,8 +2,7 @@ HOW TO USE TUTORIAL
 
 1. Run in terminal
 2. Paste "npm install"
-3. Paste "cd LoginandRegister
-pip install -r requirements.txt"
+3. Paste "pip install -r requirements.txt"
 4. Paste "npm start"
 
 # Getting Started with Create React App
