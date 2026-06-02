@@ -1,16 +1,16 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
 import bcrypt
 import os
+import jwt
+import datetime
 
 app = Flask(__name__)
 CORS(app)
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
-
-# Trang mua sắm (React event_rental) — đổi khi deploy
-SHOP_URL = os.environ.get("SHOP_URL", "http://localhost:3000")
+SECRET_KEY = os.environ.get("SECRET_KEY", "eventrent-secret-2026")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -27,6 +27,10 @@ init_db()
 
 def get_db():
     return sqlite3.connect(DB_FILE)
+
+@app.route("/")
+def index():
+    return "EventRent API is running!", 200
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -65,15 +69,29 @@ def login():
             "message": "Nhập sai tên tài khoản hoặc mật khẩu",
         })
 
+    token = jwt.encode({
+        "username": username,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    }, SECRET_KEY, algorithm="HS256")
+
     return jsonify({
         "success": True,
         "message": f"Chào mừng {username}!",
         "username": username,
+        "token": token
     })
 
-@app.route("/")
-def index():
-    return render_template("index.html", shop_url=SHOP_URL)
+@app.route("/verify", methods=["POST"])
+def verify():
+    data = request.json
+    token = data.get("token", "")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return jsonify({"success": True, "username": payload["username"]})
+    except jwt.ExpiredSignatureError:
+        return jsonify({"success": False, "message": "Token đã hết hạn!"})
+    except Exception:
+        return jsonify({"success": False, "message": "Token không hợp lệ!"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000, debug=False)
