@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { translations } from "../data/i18n";
+import { AUTH_SERVER, TOKEN_KEY, USER_KEY } from "../config/auth";
 import "../styles/auth.css";
 
 const LANG_OPTIONS = [
@@ -12,23 +13,22 @@ const LANG_OPTIONS = [
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [lang, setLang] = useState("vi");
   const [isSignUp, setIsSignUp] = useState(
     searchParams.get("mode") !== "login"
   );
-
-  useEffect(() => {
-    setIsSignUp(searchParams.get("mode") !== "login");
-  }, [searchParams]);
-
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
     remember: false,
   });
+
+  useEffect(() => {
+    setIsSignUp(searchParams.get("mode") !== "login");
+  }, [searchParams]);
 
   const t = translations[lang];
 
@@ -42,34 +42,48 @@ export default function AuthPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
-    if (isSignUp) {
-      const res = await fetch("https://logand-register-pfp.onrender.com/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: form.email, password: form.password }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        alert("Đăng ký thành công! Vui lòng đăng nhập.");
-        setIsSignUp(false);
+    try {
+      if (isSignUp) {
+        const res = await fetch(`${AUTH_SERVER}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: form.email,
+            password: form.password,
+          }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert("Đăng ký thành công! Vui lòng đăng nhập.");
+          setIsSignUp(false);
+        } else {
+          alert(result.message);
+        }
       } else {
-        alert(result.message);
+        const res = await fetch(`${AUTH_SERVER}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: form.email,
+            password: form.password,
+          }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          // Lưu token JWT (bảo mật hơn)
+          localStorage.setItem(TOKEN_KEY, result.token);
+          localStorage.setItem(USER_KEY, result.username || form.email);
+          window.location.replace("/");
+        } else {
+          alert(result.message);
+        }
       }
-    } else {
-      const res = await fetch("https://logand-register-pfp.onrender.com/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: form.email, password: form.password }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        localStorage.setItem("username", form.email);
-        // Quay về trang chủ sau khi đăng nhập
-        navigate("/");
-      } else {
-        alert(result.message);
-      }
+    } catch (err) {
+      alert("Lỗi kết nối server. Vui lòng thử lại!");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -152,8 +166,8 @@ export default function AuthPage() {
               </div>
             )}
 
-            <button type="submit" className="auth-submit">
-              {isSignUp ? t.signUpBtn : t.signInBtn}
+            <button type="submit" className="auth-submit" disabled={loading}>
+              {loading ? "Đang xử lý..." : isSignUp ? t.signUpBtn : t.signInBtn}
             </button>
           </form>
 
