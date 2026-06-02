@@ -19,8 +19,9 @@
   --radius-md: 12px;
   --radius-lg: 20px;
   --radius-pill: 999px;
-  --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-display: Georgia, "Times New Roman", serif;
+  /* Be Vietnam Pro: hiển thị đúng chữ có dấu (không bị tách quố/c, khấ/u) */
+  --font-sans: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
   --container: 1200px;
   --header-height: 120px;
 }

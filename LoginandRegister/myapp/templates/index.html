@@ -4,49 +4,128 @@
     <meta charset="UTF-8">
     <title>Hệ thống tài khoản</title>
     <style>
-        body { font-family: Arial; display: flex; justify-content: center; padding-top: 80px; background: #f0f0f0; }
-        .box { background: white; padding: 30px; border-radius: 10px; width: 320px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h2 { text-align: center; color: #333; }
-        input { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
-        .btn-row { display: flex; gap: 10px; margin-top: 15px; }
-        button { flex: 1; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; }
-        #btn-login { background: #4CAF50; }
-        #btn-register { background: #008CBA; }
-        #message { margin-top: 15px; text-align: center; font-weight: bold; }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            padding-top: 80px;
+            background: #f0f0f0;
+        }
+        .box {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            width: 320px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin: 0 0 6px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            margin: 0 0 16px;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #4caf50;
+        }
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+        }
+        #btn-login { background: #4caf50; }
+        #btn-login:hover { background: #43a047; }
+        #btn-register { background: #008cba; }
+        #btn-register:hover { background: #007ba7; }
+        #message {
+            margin-top: 15px;
+            min-height: 22px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+            line-height: 1.4;
+            padding: 8px 10px;
+            border-radius: 6px;
+        }
+        #message.msg-error {
+            color: #c62828;
+            background: #ffebee;
+        }
+        #message.msg-success {
+            color: #2e7d32;
+            background: #e8f5e9;
+        }
+        #message.msg-warning {
+            color: #e65100;
+            background: #fff3e0;
+        }
+        #message:empty {
+            display: none;
+        }
     </style>
 </head>
 <body>
 <div class="box">
     <h2>HỆ THỐNG TÀI KHOẢN</h2>
-    <input type="text" id="username" placeholder="Tài khoản" />
-    <input type="password" id="password" placeholder="Mật khẩu" />
+    <p class="subtitle">Đăng nhập hoặc tạo tài khoản mới</p>
+    <input type="text" id="username" placeholder="Tài khoản" autocomplete="username" />
+    <input type="password" id="password" placeholder="Mật khẩu" autocomplete="current-password" />
     <div class="btn-row">
-        <button id="btn-login" onclick="handleLogin()">Đăng nhập</button>
-        <button id="btn-register" onclick="handleRegister()">Đăng ký</button>
+        <button type="button" id="btn-login" onclick="handleLogin()">Đăng nhập</button>
+        <button type="button" id="btn-register" onclick="handleRegister()">Đăng ký</button>
     </div>
-    <div id="message"></div>
+    <div id="message" role="alert" aria-live="polite"></div>
 </div>
 
 <script>
     const SHOP_URL = "{{ shop_url }}";
 
+    const MSG = {
+        loginWrong: "Nhập sai tên tài khoản hoặc mật khẩu",
+        registerExists: "Tài khoản đã tồn tại",
+        registerOk: "Đăng ký thành công",
+        empty: "Vui lòng nhập đầy đủ tài khoản và mật khẩu",
+    };
+
     function getInputs() {
         return {
             username: document.getElementById("username").value.trim(),
-            password: document.getElementById("password").value.trim()
+            password: document.getElementById("password").value.trim(),
         };
     }
 
-    function showMessage(text, color) {
+    function showMessage(text, type) {
         const el = document.getElementById("message");
-        el.style.color = color;
         el.textContent = text;
+        el.className = type ? "msg-" + type : "";
     }
 
     async function handleLogin() {
         const data = getInputs();
         if (!data.username || !data.password) {
-            showMessage("Vui lòng nhập đầy đủ!", "orange");
+            showMessage(MSG.empty, "warning");
             return;
         }
         try {
@@ -54,26 +133,26 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify(data)
+                body: JSON.stringify(data),
             });
             const result = await res.json();
             if (result.success) {
                 const user = result.username || data.username;
-                showMessage(result.message + " Đang chuyển...", "green");
+                showMessage("Đăng nhập thành công. Đang chuyển...", "success");
                 window.location.href =
                     SHOP_URL + "?username=" + encodeURIComponent(user);
                 return;
             }
-            showMessage(result.message, "red");
+            showMessage(MSG.loginWrong, "error");
         } catch (err) {
-            showMessage("Lỗi kết nối server: " + err.message, "red");
+            showMessage("Lỗi kết nối server: " + err.message, "error");
         }
     }
 
     async function handleRegister() {
         const data = getInputs();
         if (!data.username || !data.password) {
-            showMessage("Vui lòng nhập đầy đủ!", "orange");
+            showMessage(MSG.empty, "warning");
             return;
         }
         try {
@@ -81,12 +160,20 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify(data)
+                body: JSON.stringify(data),
             });
             const result = await res.json();
-            showMessage(result.message, result.success ? "green" : "red");
+            if (result.success) {
+                showMessage(MSG.registerOk, "success");
+                return;
+            }
+            if (result.message && result.message.includes("tồn tại")) {
+                showMessage(MSG.registerExists, "error");
+                return;
+            }
+            showMessage(result.message || MSG.registerExists, "error");
         } catch (err) {
-            showMessage("Lỗi kết nối server: " + err.message, "red");
+            showMessage("Lỗi kết nối server: " + err.message, "error");
         }
     }
 </script>

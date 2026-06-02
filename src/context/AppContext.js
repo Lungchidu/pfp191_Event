@@ -162,6 +162,13 @@ export function AppProvider({ children }) {
 
   const addToCart = useCallback(
     (product, quantity = 1, days = 1) => {
+      // ✅ Kiểm tra đăng nhập trước khi cho thêm vào giỏ
+      if (!localStorage.getItem("username")) {
+        alert("Bạn cần đăng nhập hoặc đăng ký để thuê hàng!");
+        navigate("/auth?mode=login");
+        return;
+      }
+
       setCart((prev) => {
         const existing = prev.find((i) => i.id === product.id);
         if (existing) {
@@ -190,7 +197,7 @@ export function AppProvider({ children }) {
       });
       showToast(`Đã thêm "${product.name}" vào giỏ thuê`);
     },
-    [showToast]
+    [showToast, navigate]
   );
 
   const updateCartItem = useCallback((id, patch) => {

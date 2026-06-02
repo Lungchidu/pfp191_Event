@@ -41,13 +41,13 @@ def register():
     existing = conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone()
     if existing:
         conn.close()
-        return jsonify({"success": False, "message": "Tài khoản đã tồn tại!"})
+        return jsonify({"success": False, "message": "Tài khoản đã tồn tại"})
 
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     conn.execute("INSERT INTO users VALUES (?, ?)", (username, hashed))
     conn.commit()
     conn.close()
-    return jsonify({"success": True, "message": "Đăng ký thành công!"})
+    return jsonify({"success": True, "message": "Đăng ký thành công"})
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -60,7 +60,10 @@ def login():
     conn.close()
 
     if not row or not bcrypt.checkpw(password.encode(), row[0].encode()):
-        return jsonify({"success": False, "message": "Tài khoản hoặc mật khẩu không đúng!"})
+        return jsonify({
+            "success": False,
+            "message": "Nhập sai tên tài khoản hoặc mật khẩu",
+        })
 
     return jsonify({
         "success": True,

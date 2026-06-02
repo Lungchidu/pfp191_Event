@@ -33,7 +33,14 @@ export default function HeroSection() {
             >
               <img src={slide.image} alt={slide.title} />
               <div className="hero-carousel__overlay">
-                <h2>{slide.title}</h2>
+                <h2>
+                  {slide.title.split("\n").map((line, i) => (
+                    <span key={i}>
+                      {i > 0 && <br />}
+                      {line}
+                    </span>
+                  ))}
+                </h2>
                 <p>{slide.subtitle}</p>
                 <button
                   type="button"
