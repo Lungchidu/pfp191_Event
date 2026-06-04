@@ -1,50 +1,31 @@
-const AUTH_SERVER =
-  process.env.REACT_APP_AUTH_URL || "http://localhost:5000";
+/** Server Python Flask — toàn bộ backend */
+export const API_BASE =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-export { AUTH_SERVER };
-export const TOKEN_KEY = "token";
-export const USER_KEY = "username";
+export const AUTH_SERVER = API_BASE;
 
-export function isLoggedIn() {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (!token) return false;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    // Kiểm tra token còn hạn không
-    return payload.exp > Date.now() / 1000;
-  } catch {
-    return false;
-  }
+async function apiRequest(url, options = {}) {
+  const res = await fetch(`${API_BASE}${url}`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const data = await res.json();
+  return { res, data };
 }
 
-export function getUsername() {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (!token) return localStorage.getItem(USER_KEY) || "";
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.username;
-  } catch {
-    return "";
-  }
+/** Kiểm tra đã đăng nhập (session Python) */
+export async function fetchCurrentUser() {
+  const { res, data } = await apiRequest("/api/me");
+  if (!res.ok || !data.logged_in) return null;
+  return data.username;
 }
 
 export function getAuthUrl() {
-  return "/auth";
+  return AUTH_SERVER;
 }
 
-export function logout() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-  window.location.href = "/auth";
-}
-
-export function saveUserFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const user = params.get("username");
-  if (!user) return;
-  localStorage.setItem(USER_KEY, user);
-  params.delete("username");
-  const rest = params.toString();
-  const path = window.location.pathname;
-  window.history.replaceState({}, "", rest ? `${path}?${rest}` : path);
+export async function logout() {
+  await apiRequest("/api/logout", { method: "POST" });
+  window.location.href = AUTH_SERVER;
 }

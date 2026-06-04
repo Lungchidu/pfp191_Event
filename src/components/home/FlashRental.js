@@ -1,8 +1,8 @@
-import { FLASH_PRODUCTS, formatPrice } from "../../data/mockData";
+import { formatPrice } from "../../utils/formatPrice";
 import { useApp } from "../../context/AppContext";
 
 export default function FlashRental({ title, seeMore }) {
-  const { goToProduct, addToCart, updateFilters } = useApp();
+  const { flashProducts, goToProduct, addToCart, updateFilters } = useApp();
 
   return (
     <section className="container section-card" id="flash">
@@ -22,7 +22,7 @@ export default function FlashRental({ title, seeMore }) {
         </button>
       </div>
       <div className="flash-sale">
-        {FLASH_PRODUCTS.map((product) => {
+        {flashProducts.map((product) => {
           const percent = Math.round(
             (product.sold / product.stock) * 100
           );

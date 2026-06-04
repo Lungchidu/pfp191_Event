@@ -1,16 +1,54 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ShoppingCart, Star } from "lucide-react";
-import { PRODUCTS, formatPrice } from "../data/mockData";
+import { formatPrice } from "../utils/formatPrice";
+import { fetchProductDetail } from "../services/shopApi";
 import { useApp } from "../context/AppContext";
 import "../styles/product.css";
 
 export default function ProductPage() {
   const { id } = useParams();
-  const { getProduct, addToCart, goToProduct } = useApp();
-  const product = getProduct(id);
+  const { addToCart, goToProduct } = useApp();
+  const [product, setProduct] = useState(null);
+  const [related, setRelated] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [days, setDays] = useState(1);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setLoading(true);
+        const data = await fetchProductDetail(id);
+        if (!cancelled) {
+          setProduct(data.product);
+          setRelated(data.related);
+        }
+      } catch {
+        if (!cancelled) {
+          setProduct(null);
+          setRelated([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="product-page container">
+        <p>Đang tải từ server Python...</p>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -22,9 +60,6 @@ export default function ProductPage() {
   }
 
   const total = product.price * quantity * days;
-  const related = PRODUCTS.filter(
-    (p) => p.categoryId === product.categoryId && p.id !== product.id
-  ).slice(0, 4);
 
   return (
     <div className="product-page">
