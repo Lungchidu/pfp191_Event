@@ -7,33 +7,27 @@ import {
   useState,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { fetchCurrentUser } from "../config/auth";
-import {
-  fetchUiData,
-  fetchProducts,
-  fetchFlashProducts,
-  fetchCategories,
-  fetchLocations,
-  fetchCart,
-  addCartItem,
-  updateCartItemApi,
-  removeCartItemApi,
-  checkoutCart,
-} from "../services/shopApi";
+import { PRODUCTS } from "../data/mockData";
+import { isLoggedIn } from "../config/auth";
+import { filterProducts } from "../utils/filterProducts";
+
+const CART_KEY = "eventrent_cart";
 
 const AppContext = createContext(null);
+
+function loadCart() {
+  try {
+    const raw = localStorage.getItem(CART_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
 
 export function AppProvider({ children }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [username, setUsername] = useState(null);
-  const [ui, setUi] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [flashProducts, setFlashProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [cart, setCart] = useState(loadCart);
   const [toast, setToast] = useState(null);
 
   const filters = useMemo(
@@ -54,7 +48,10 @@ export function AppProvider({ children }) {
     [searchParams]
   );
 
-  const filteredProducts = products;
+  const filteredProducts = useMemo(
+    () => filterProducts(PRODUCTS, filters),
+    [filters]
+  );
 
   const cartCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
@@ -70,68 +67,15 @@ export function AppProvider({ children }) {
     [cart]
   );
 
+  useEffect(() => {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  }, [cart]);
+
   const showToast = useCallback((message) => {
     setToast(message);
     const timer = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(timer);
   }, []);
-
-  const initShop = useCallback(async () => {
-    const user = await fetchCurrentUser();
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    setUsername(user);
-
-    try {
-      setLoading(true);
-      const [uiData, categoryList, locationList, flashList, cartItems] =
-        await Promise.all([
-          fetchUiData(),
-          fetchCategories(),
-          fetchLocations(),
-          fetchFlashProducts(),
-          fetchCart(),
-        ]);
-
-      setUi(uiData);
-      setCategories(categoryList);
-      setLocations(locationList);
-      setFlashProducts(flashList);
-      setCart(cartItems);
-    } catch (err) {
-      showToast(err.message || "Không tải được dữ liệu từ Python");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
-
-  useEffect(() => {
-    initShop();
-  }, [initShop]);
-
-  useEffect(() => {
-    if (!username) return;
-
-    let cancelled = false;
-    async function reload() {
-      try {
-        setLoading(true);
-        const list = await fetchProducts(filters);
-        if (!cancelled) setProducts(list);
-      } catch (err) {
-        if (!cancelled) showToast(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    reload();
-    return () => {
-      cancelled = true;
-    };
-  }, [filters, username, showToast]);
 
   const updateFilters = useCallback(
     (patch, options = {}) => {
@@ -213,66 +157,66 @@ export function AppProvider({ children }) {
   );
 
   const getProduct = useCallback(
-    (id) => products.find((p) => p.id === Number(id)),
-    [products]
+    (id) => PRODUCTS.find((p) => p.id === Number(id)),
+    []
   );
 
   const addToCart = useCallback(
-    async (product, quantity = 1, days = 1) => {
-      try {
-        const items = await addCartItem(product.id, quantity, days);
-        setCart(items);
-        showToast(`Đã thêm "${product.name}" vào giỏ thuê`);
-      } catch (err) {
-        showToast(err.message);
+    (product, quantity = 1, days = 1) => {
+      // ✅ Kiểm tra đăng nhập trước khi cho thêm vào giỏ
+      if (!isLoggedIn()) {
+        alert("Bạn cần đăng nhập hoặc đăng ký để thuê hàng!");
+        navigate("/auth?mode=login");
+        return;
       }
+
+      setCart((prev) => {
+        const existing = prev.find((i) => i.id === product.id);
+        if (existing) {
+          return prev.map((i) =>
+            i.id === product.id
+              ? {
+                  ...i,
+                  quantity: i.quantity + quantity,
+                  days: Math.max(i.days, days),
+                }
+              : i
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            image: product.image,
+            location: product.location,
+            quantity,
+            days,
+          },
+        ];
+      });
+      showToast(`Đã thêm "${product.name}" vào giỏ thuê`);
     },
-    [showToast]
+    [showToast, navigate]
   );
 
-  const updateCartItem = useCallback(
-    async (id, patch) => {
-      try {
-        const items = await updateCartItemApi(id, patch);
-        setCart(items);
-      } catch (err) {
-        showToast(err.message);
-      }
-    },
-    [showToast]
-  );
+  const updateCartItem = useCallback((id, patch) => {
+    setCart((prev) =>
+      prev
+        .map((item) =>
+          item.id === id ? { ...item, ...patch } : item
+        )
+        .filter((item) => item.quantity > 0)
+    );
+  }, []);
 
-  const removeFromCart = useCallback(
-    async (id) => {
-      try {
-        const items = await removeCartItemApi(id);
-        setCart(items);
-        showToast("Đã xóa khỏi giỏ thuê");
-      } catch (err) {
-        showToast(err.message);
-      }
-    },
-    [showToast]
-  );
-
-  const checkout = useCallback(async () => {
-    try {
-      const result = await checkoutCart();
-      setCart([]);
-      showToast(result.message);
-    } catch (err) {
-      showToast(err.message);
-    }
+  const removeFromCart = useCallback((id) => {
+    setCart((prev) => prev.filter((item) => item.id !== id));
+    showToast("Đã xóa khỏi giỏ thuê");
   }, [showToast]);
 
   const value = {
-    username,
-    ui,
-    products,
-    flashProducts,
-    categories,
-    locations,
-    loading,
     filters,
     filteredProducts,
     cart,
@@ -289,10 +233,8 @@ export function AppProvider({ children }) {
     addToCart,
     updateCartItem,
     removeFromCart,
-    checkout,
     showToast,
     navigate,
-    reloadShop: initShop,
   };
 
   return (
