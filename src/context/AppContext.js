@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../data/mockData";
+import { isLoggedIn } from "../config/auth";
 import { filterProducts } from "../utils/filterProducts";
 
 const CART_KEY = "eventrent_cart";
@@ -163,7 +164,7 @@ export function AppProvider({ children }) {
   const addToCart = useCallback(
     (product, quantity = 1, days = 1) => {
       // ✅ Kiểm tra đăng nhập trước khi cho thêm vào giỏ
-      if (!localStorage.getItem("username")) {
+      if (!isLoggedIn()) {
         alert("Bạn cần đăng nhập hoặc đăng ký để thuê hàng!");
         navigate("/auth?mode=login");
         return;
