@@ -1,8 +1,7 @@
-import { LOCATIONS } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
 
 export default function ProductFilters({ t }) {
-  const { filters, updateFilters, clearFilters, filteredProducts } =
+  const { filters, locations, updateFilters, clearFilters, filteredProducts } =
     useApp();
 
   return (
@@ -39,7 +38,7 @@ export default function ProductFilters({ t }) {
           aria-label={t.filterLocation}
         >
           <option value="">{t.allLocations}</option>
-          {LOCATIONS.map((loc) => (
+          {locations.map((loc) => (
             <option key={loc} value={loc}>
               {loc}
             </option>
