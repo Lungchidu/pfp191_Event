@@ -1,19 +1,39 @@
-import { API_BASE } from "../config/auth";
+import { API_BASE, getStoredUsername } from "../config/auth";
+
+function buildHeaders(extra = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...extra,
+  };
+  const username = getStoredUsername();
+  if (username) {
+    headers["X-Username"] = username;
+  }
+  return headers;
+}
 
 async function request(url, options = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: buildHeaders(options.headers),
   });
-  const data = await res.json();
+
+  let data = {};
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(
+      "Không kết nối được server Python. Chạy: cd LoginandRegister/myapp && python app.py"
+    );
+  }
+
   if (!res.ok || data.success === false) {
-    throw new Error(data.message || "Lỗi kết nối server Python");
+    throw new Error(data.message || "Lỗi server Python");
   }
   return data;
 }
 
-/** Chuyển bộ lọc URL thành query cho Python */
 function filtersToQuery(filters) {
   const params = new URLSearchParams();
   if (filters.query) params.set("q", filters.query);
@@ -30,7 +50,8 @@ function filtersToQuery(filters) {
 }
 
 export async function fetchUiData() {
-  return request("/api/ui");
+  const data = await request("/api/ui");
+  return data;
 }
 
 export async function fetchProducts(filters = {}) {

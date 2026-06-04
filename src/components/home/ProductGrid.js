@@ -1,17 +1,9 @@
-import { formatPrice } from "../../utils/formatPrice";
+import { formatPrice } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
 
 export default function ProductGrid({ t }) {
-  const { loading, filteredProducts, goToProduct, addToCart, filters } =
+  const { filteredProducts, goToProduct, addToCart, filters } =
     useApp();
-
-  if (loading) {
-    return (
-      <section className="container section-card product-empty">
-        <p>Đang tải sản phẩm từ server Python...</p>
-      </section>
-    );
-  }
 
   if (filteredProducts.length === 0) {
     return (
