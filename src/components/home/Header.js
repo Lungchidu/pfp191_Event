@@ -3,30 +3,27 @@ import { Link, useNavigate } from "react-router-dom";
 import { ShoppingCart, User, LogIn } from "lucide-react";
 import { POPULAR_SEARCHES } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
-import { logout, USER_KEY } from "../../config/auth";
+import { logout, getUsername, isLoggedIn } from "../../config/auth";
 
 export default function Header({ t, lang, onLangChange }) {
   const { filters, search, cartCount } = useApp();
   const navigate = useNavigate();
   const [input, setInput] = useState(filters.query);
-  const [username, setUsername] = useState(
-    () => localStorage.getItem(USER_KEY) || ""
-  );
+  // Đọc username từ JWT token thay vì từ key "username" trong localStorage
+  const [username, setUsername] = useState(() => getUsername());
 
   useEffect(() => {
     setInput(filters.query);
   }, [filters.query]);
 
-  // Cập nhật username khi localStorage thay đổi
+  // Sync username mỗi giây — bắt được cả khi DevTools xóa key trong cùng tab
   useEffect(() => {
-    const onStorage = () =>
-      setUsername(localStorage.getItem(USER_KEY) || "");
-    window.addEventListener("storage", onStorage);
-    // cũng poll khi focus lại tab
-    window.addEventListener("focus", onStorage);
+    const syncUsername = () => setUsername(getUsername());
+    const interval = setInterval(syncUsername, 1000);
+    window.addEventListener("focus", syncUsername);
     return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", onStorage);
+      clearInterval(interval);
+      window.removeEventListener("focus", syncUsername);
     };
   }, []);
 
@@ -173,7 +170,6 @@ export default function Header({ t, lang, onLangChange }) {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              {/* Nút Login nổi bật ở góc phải nếu chưa đăng nhập */}
               {!username && (
                 <button
                   type="button"
