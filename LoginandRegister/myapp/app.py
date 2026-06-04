@@ -9,7 +9,7 @@ import datetime
 app = Flask(__name__)
 CORS(app)
 
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "event_rental.db")
 SECRET_KEY = os.environ.get("SECRET_KEY", "eventrent-secret-2026")
 
 def init_db():
