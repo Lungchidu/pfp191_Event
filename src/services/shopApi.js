@@ -1,4 +1,4 @@
-import { API_BASE, getStoredUsername } from "../config/auth";
+import { API_BASE, getStoredUsername, parseApiResponse } from "../config/auth";
 
 function buildHeaders(extra = {}) {
   const headers = {
@@ -21,10 +21,11 @@ async function request(url, options = {}) {
 
   let data = {};
   try {
-    data = await res.json();
-  } catch {
+    data = await parseApiResponse(res);
+  } catch (err) {
     throw new Error(
-      "Không kết nối được server Python. Chạy: cd LoginandRegister/myapp && python app.py"
+      err.message ||
+        "Không kết nối được server Python. Chạy: cd LoginandRegister/myapp && python app.py"
     );
   }
 
@@ -105,6 +106,16 @@ export async function removeCartItemApi(productId) {
   return data.items;
 }
 
-export async function checkoutCart() {
-  return request("/api/checkout", { method: "POST" });
+export async function checkoutCart(items = [], note = "") {
+  return request("/api/checkout", {
+    method: "POST",
+    body: JSON.stringify({
+      items: items.map((item) => ({
+        product_id: item.id,
+        quantity: item.quantity,
+        days: item.days,
+      })),
+      note,
+    }),
+  });
 }

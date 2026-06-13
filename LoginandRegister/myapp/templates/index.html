@@ -138,9 +138,13 @@
             const result = await res.json();
             if (result.success) {
                 const user = result.username || data.username;
+                const token = result.token || "";
                 showMessage("Đăng nhập thành công. Đang chuyển...", "success");
-                window.location.href =
-                    SHOP_URL + "?username=" + encodeURIComponent(user);
+                let url = SHOP_URL + "?username=" + encodeURIComponent(user);
+                if (token) {
+                    url += "&token=" + encodeURIComponent(token);
+                }
+                window.location.href = url;
                 return;
             }
             showMessage(MSG.loginWrong, "error");

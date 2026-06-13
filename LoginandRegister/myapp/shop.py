@@ -1,51 +1,5 @@
 from database import row_to_category, row_to_product
-
-
-def filter_products(products, filters):
-    """Lọc sản phẩm — logic chạy trên Python (không còn trong JavaScript)."""
-    query = (filters.get("query") or "").strip().lower()
-    category_id = filters.get("category_id")
-    location = filters.get("location") or ""
-    min_rating = float(filters.get("min_rating") or 0)
-    max_price = filters.get("max_price")
-    flash_only = filters.get("flash_only") in (True, "1", "true", 1)
-    sort_by = filters.get("sort_by") or "default"
-
-    result = []
-    for p in products:
-        if flash_only and not p["isFlash"]:
-            continue
-        if category_id is not None and category_id != "":
-            if p["categoryId"] != int(category_id):
-                continue
-        if location and p["location"] != location:
-            continue
-        if p["rating"] < min_rating:
-            continue
-        if max_price is not None and max_price != "":
-            if p["price"] > int(max_price):
-                continue
-
-        if query:
-            haystack = " ".join([
-                p["name"],
-                p["description"],
-                p["location"],
-                *p.get("tags", []),
-            ]).lower()
-            if query not in haystack:
-                continue
-
-        result.append(p)
-
-    if sort_by == "price-asc":
-        result.sort(key=lambda x: x["price"])
-    elif sort_by == "price-desc":
-        result.sort(key=lambda x: x["price"], reverse=True)
-    elif sort_by == "rating":
-        result.sort(key=lambda x: x["rating"], reverse=True)
-
-    return result
+from search_filter import filter_products, search
 
 
 def parse_filters_from_request(args):
@@ -242,19 +196,69 @@ def remove_from_cart(db, username, product_id):
     return True, "Đã xóa khỏi giỏ thuê"
 
 
-def checkout_cart(db, username):
-    """Đặt thuê: lưu đơn hàng và xóa giỏ."""
-    items = get_cart_items(db, username)
+def _items_from_client(db, client_items):
+    """Lấy giá từ database theo danh sách React gửi lên."""
+    items = []
+    for row in client_items:
+        product_id = int(row.get("product_id") or row.get("id"))
+        quantity = max(1, int(row.get("quantity", 1)))
+        days = max(1, int(row.get("days", 1)))
+        product = get_product_by_id(db, product_id)
+        if product is None:
+            return None, f"Không tìm thấy sản phẩm #{product_id}!"
+        items.append({
+            "id": product_id,
+            "name": product["name"],
+            "price": product["price"],
+            "image": product["image"],
+            "location": product["location"],
+            "quantity": quantity,
+            "days": days,
+        })
+    return items, None
+
+
+def checkout_cart(db, username, client_items=None, note=""):
+    """Đặt thuê: lưu đơn hàng và xóa giỏ.
+
+  client_items: giỏ từ React (localStorage) — ưu tiên dùng khi có.
+    """
+    if client_items:
+        items, err = _items_from_client(db, client_items)
+        if err:
+            return False, err, 0
+    else:
+        items = get_cart_items(db, username)
+
     if len(items) == 0:
         return False, "Giỏ thuê đang trống!", 0
 
     total = calc_cart_total(items)
     conn = db.connect()
-    conn.execute(
-        "INSERT INTO orders (username, total) VALUES (?, ?)",
-        (username, total),
-    )
-    conn.execute("DELETE FROM cart_items WHERE username = ?", (username,))
-    conn.commit()
-    conn.close()
+    try:
+        cur = conn.execute(
+            "INSERT INTO orders (username, total, note) VALUES (?, ?, ?)",
+            (username, total, note or ""),
+        )
+        order_id = cur.lastrowid
+        for item in items:
+            conn.execute(
+                """
+                INSERT INTO order_items
+                (order_id, product_id, product_name, price, quantity, days)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    order_id,
+                    item["id"],
+                    item["name"],
+                    item["price"],
+                    item["quantity"],
+                    item["days"],
+                ),
+            )
+        conn.execute("DELETE FROM cart_items WHERE username = ?", (username,))
+        conn.commit()
+    finally:
+        conn.close()
     return True, f"Đặt thuê thành công! Tổng: {total:,}đ", total

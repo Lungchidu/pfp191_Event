@@ -1,23 +1,26 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react";
 import { formatPrice } from "../data/mockData";
 import { useApp } from "../context/AppContext";
+import { isLoggedIn } from "../config/auth";
 import "../styles/cart.css";
 
 export default function CartPage() {
+  const navigate = useNavigate();
   const {
     cart,
     cartTotal,
     updateCartItem,
     removeFromCart,
-    showToast,
   } = useApp();
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
-    showToast(
-      "Đặt thuê thành công (demo)! Backend sẽ xử lý đơn hàng sau."
-    );
+    if (!isLoggedIn()) {
+      navigate("/auth?mode=login");
+      return;
+    }
+    navigate("/checkout");
   };
 
   return (
@@ -123,7 +126,7 @@ export default function CartPage() {
                 className="btn-primary"
                 onClick={handleCheckout}
               >
-                Đặt thuê ngay
+                Thanh toán
               </button>
             </div>
           </>

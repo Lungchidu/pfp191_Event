@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { translations } from "../data/i18n";
-import { AUTH_SERVER, TOKEN_KEY, USER_KEY } from "../config/auth";
+import {
+  AUTH_SERVER,
+  TOKEN_KEY,
+  USER_KEY,
+  parseApiResponse,
+} from "../config/auth";
 import "../styles/auth.css";
 
 const LANG_OPTIONS = [
@@ -54,7 +59,7 @@ export default function AuthPage() {
             password: form.password,
           }),
         });
-        const result = await res.json();
+        const result = await parseApiResponse(res);
         if (result.success) {
           alert("Đăng ký thành công! Vui lòng đăng nhập.");
           setIsSignUp(false);
@@ -70,7 +75,7 @@ export default function AuthPage() {
             password: form.password,
           }),
         });
-        const result = await res.json();
+        const result = await parseApiResponse(res);
         if (result.success) {
           // Lưu token JWT (bảo mật hơn)
           localStorage.setItem(TOKEN_KEY, result.token);
@@ -81,7 +86,14 @@ export default function AuthPage() {
         }
       }
     } catch (err) {
-      alert("Lỗi kết nối server. Vui lòng thử lại!");
+      alert(
+        "Không kết nối được backend Python (port 5000).\n\n" +
+          "Hãy mở terminal và chạy:\n" +
+          "cd LoginandRegister/myapp\n" +
+          "python app.py\n\n" +
+          "Sau đó tải lại trang này (F5).\n\n" +
+          (err?.message ? `Chi tiết: ${err.message}` : "")
+      );
     } finally {
       setLoading(false);
     }
@@ -102,7 +114,7 @@ export default function AuthPage() {
         ))}
       </div>
 
-      <div className={`auth-card ${isSignUp ? "signup-mode" : "login-mode"}`}>
+      <div className="auth-card">
         <div className="auth-form-panel">
           <h1>{isSignUp ? t.signUp : t.signIn}</h1>
 
@@ -189,18 +201,6 @@ export default function AuthPage() {
           <Link to="/" className="auth-back-home">
             ← Về trang chủ
           </Link>
-        </div>
-
-        <div className="auth-welcome-panel">
-          <h2>{isSignUp ? t.welcomeBack : t.joinUs}</h2>
-          <p>{isSignUp ? t.welcomeDesc : t.joinDesc}</p>
-          <button
-            type="button"
-            className="auth-panel-btn"
-            onClick={() => setIsSignUp((v) => !v)}
-          >
-            {isSignUp ? t.signIn : t.signUp}
-          </button>
         </div>
       </div>
     </div>
