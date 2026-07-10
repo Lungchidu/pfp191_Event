@@ -549,12 +549,11 @@ export const trendingTranslations = {
 
 export function translateProduct(product, lang) {
   if (lang !== "en" || !product) return product;
-  const trans = productTranslations.en[product.id];
-  if (!trans) return product;
+  const trans = productTranslations.en[product.id] || {};
   return {
     ...product,
-    name: trans.name || product.name,
-    description: trans.description || product.description,
+    name: product.name_en || trans.name || product.name,
+    description: product.description_en || trans.description || product.description,
     specs: trans.specs || product.specs,
     location: locationTranslations.en[product.location] || product.location
   };

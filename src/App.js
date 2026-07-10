@@ -9,6 +9,7 @@ import Toast from "./components/Toast";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { saveUserFromUrl } from "./config/auth";
 import RedirectToAuth from "./components/RedirectToAuth";
+import AdminPage from "./pages/AdminPage";
 
 export default function App() {
   useEffect(() => {
@@ -55,6 +56,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <OrderTrackingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPage />
             </ProtectedRoute>
           }
         />

@@ -65,7 +65,9 @@ class Database:
                 CREATE TABLE IF NOT EXISTS products (
                     id             INTEGER PRIMARY KEY,
                     name           TEXT    NOT NULL,
+                    name_en        TEXT    DEFAULT '',
                     description    TEXT    NOT NULL DEFAULT '',
+                    description_en TEXT    DEFAULT '',
                     price          INTEGER NOT NULL DEFAULT 0,
                     original_price INTEGER NOT NULL DEFAULT 0,
                     discount       INTEGER NOT NULL DEFAULT 0,
@@ -84,6 +86,13 @@ class Database:
                 )
             """)
 
+            # Migration: add name_en and description_en to existing products table if not exists
+            try:
+                conn.execute("ALTER TABLE products ADD COLUMN name_en TEXT DEFAULT ''")
+                conn.execute("ALTER TABLE products ADD COLUMN description_en TEXT DEFAULT ''")
+            except Exception:
+                pass # Column already exists
+
             # ── Giỏ hàng ──────────────────────────────────────────────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS cart_items (
@@ -99,14 +108,21 @@ class Database:
             # ── Đơn hàng (header) ─────────────────────────────────────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS orders (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username   TEXT    NOT NULL,
-                    total      INTEGER NOT NULL DEFAULT 0,
-                    status     TEXT    NOT NULL DEFAULT 'pending',
-                    note       TEXT    DEFAULT '',
-                    created_at TEXT    DEFAULT (datetime('now','localtime'))
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username      TEXT    NOT NULL,
+                    total         INTEGER NOT NULL DEFAULT 0,
+                    status        TEXT    NOT NULL DEFAULT 'pending',
+                    note          TEXT    DEFAULT '',
+                    delivery_date TEXT    DEFAULT '',
+                    created_at    TEXT    DEFAULT (datetime('now','localtime'))
                 )
             """)
+            
+            # Migration: add delivery_date to existing orders table if not exists
+            try:
+                conn.execute("ALTER TABLE orders ADD COLUMN delivery_date TEXT DEFAULT ''")
+            except Exception:
+                pass # Column already exists
 
             # ── Chi tiết đơn hàng ─────────────────────────────────────
             conn.execute("""
@@ -218,24 +234,27 @@ class CustomerDatabase:
 # Helper: chuyển Row → dict
 # ──────────────────────────────────────────────────────────────
 def row_to_product(row: sqlite3.Row) -> dict:
+    d = dict(row)
     return {
-        "id":            row["id"],
-        "name":          row["name"],
-        "description":   row["description"],
-        "price":         row["price"],
-        "originalPrice": row["original_price"],
-        "discount":      row["discount"],
-        "sold":          row["sold"],
-        "stock":         row["stock"],
-        "rating":        row["rating"],
-        "location":      row["location"],
-        "categoryId":    row["category_id"],
-        "isFlash":       bool(row["is_flash"]),
-        "tags":          json.loads(row["tags"]),
-        "image":         row["image"],
-        "specs":         json.loads(row["specs"]),
-        "createdAt":     row["created_at"],
-        "updatedAt":     row["updated_at"],
+        "id":            d.get("id"),
+        "name":          d.get("name"),
+        "name_en":       d.get("name_en", ""),
+        "description":   d.get("description"),
+        "description_en":d.get("description_en", ""),
+        "price":         d.get("price"),
+        "originalPrice": d.get("original_price"),
+        "discount":      d.get("discount"),
+        "sold":          d.get("sold"),
+        "stock":         d.get("stock"),
+        "rating":        d.get("rating"),
+        "location":      d.get("location"),
+        "categoryId":    d.get("category_id"),
+        "isFlash":       bool(d.get("is_flash", 0)),
+        "tags":          json.loads(d.get("tags") or '[]'),
+        "image":         d.get("image"),
+        "specs":         json.loads(d.get("specs") or '[]'),
+        "createdAt":     d.get("created_at"),
+        "updatedAt":     d.get("updated_at"),
     }
 
 
@@ -261,11 +280,13 @@ def row_to_user(row: sqlite3.Row) -> dict:
 
 
 def row_to_order(row: sqlite3.Row) -> dict:
+    d = dict(row)
     return {
-        "id":        row["id"],
-        "username":  row["username"],
-        "total":     row["total"],
-        "status":    row["status"],
-        "note":      row["note"],
-        "createdAt": row["created_at"],
+        "id":        d.get("id"),
+        "username":  d.get("username"),
+        "total":     d.get("total"),
+        "status":    d.get("status"),
+        "note":      d.get("note"),
+        "deliveryDate": d.get("delivery_date", ""),
+        "createdAt": d.get("created_at"),
     }

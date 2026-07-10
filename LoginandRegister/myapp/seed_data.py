@@ -18,6 +18,12 @@ import sys
 
 import bcrypt
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # Cho phép chạy trực tiếp từ thư mục này
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import Database, CustomerDatabase
@@ -324,6 +330,14 @@ DEMO_USERS = [
         "email":     "admin@eventrent.vn",
         "full_name": "Quản trị viên",
         "phone":     "0900000001",
+        "role":      "admin",
+    },
+    {
+        "username":  "adc@bua.nhan",
+        "password":  "quangbolahut",
+        "email":     "adc@bua.nhan",
+        "full_name": "Admin ADC",
+        "phone":     "0900000003",
         "role":      "admin",
     },
     {

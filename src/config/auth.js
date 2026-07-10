@@ -66,6 +66,21 @@ export function getUsername() {
   }
 }
 
+export function getRole() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return "customer";
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.role || "customer";
+  } catch {
+    return "customer";
+  }
+}
+
+export function isAdmin() {
+  return getRole() === "admin";
+}
+
 export function getStoredUsername() {
   return getUsername();
 }

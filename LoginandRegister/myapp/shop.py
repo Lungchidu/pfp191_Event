@@ -284,6 +284,11 @@ def checkout_cart(db, username, client_items=None, note=""):
                     item["days"],
                 ),
             )
+            
+            # Cập nhật số lượng
+            conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (item["quantity"], pid))
+            # Nếu số lượng hết, xóa món hàng đó
+            conn.execute("DELETE FROM products WHERE id = ? AND stock <= 0", (pid,))
 
         conn.execute("DELETE FROM cart_items WHERE username = ?", (username,))
         conn.commit()

@@ -5,6 +5,7 @@ import os
 import sys
 import jwt
 import datetime
+from deep_translator import GoogleTranslator
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -40,6 +41,15 @@ SECRET_KEY = app.secret_key
 
 SHOP_URL = os.environ.get("SHOP_URL", "http://localhost:3000")
 
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+from flask import send_from_directory
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 def get_shop_url():
     """URL React shop — ưu tiên ?shop_url= từ query (khi React chạy port 3002...)."""
@@ -57,12 +67,25 @@ seed_all(db, customer_db, force=True)
 
 
 def get_username_from_request():
-    """Lấy username từ header, JSON body hoặc query string."""
+    """Lấy username từ header (Authorization, X-Username), JSON body hoặc query string."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            return payload.get("username", "")
+        except Exception:
+            pass
+
     username = request.headers.get("X-Username", "")
     if username:
         return username.strip()
-    data = request.get_json(silent=True) or {}
-    username = data.get("username") or request.args.get("username", "")
+    
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        username = request.form.get("username", "")
+    else:
+        data = request.get_json(silent=True) or {}
+        username = data.get("username") or request.args.get("username", "")
     return username.strip()
 
 
@@ -106,11 +129,11 @@ def login():
 
     conn = customer_db.connect()
     row = conn.execute(
-        "SELECT password FROM users WHERE username=?", (username,)
+        "SELECT password, role FROM users WHERE username=?", (username,)
     ).fetchone()
     conn.close()
 
-    if not row or not bcrypt.checkpw(password.encode(), row[0].encode()):
+    if not row or not bcrypt.checkpw(password.encode(), row["password"].encode()):
         return jsonify({
             "success": False,
             "message": "Nhập sai tên tài khoản hoặc mật khẩu",
@@ -118,6 +141,7 @@ def login():
 
     token = jwt.encode({
         "username": username,
+        "role": row["role"],
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7),
     }, SECRET_KEY, algorithm="HS256")
 
@@ -125,6 +149,7 @@ def login():
         "success": True,
         "message": f"Chào mừng {username}!",
         "username": username,
+        "role": row["role"],
         "token": token,
     })
 
@@ -135,7 +160,7 @@ def verify():
     token = data.get("token", "")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return jsonify({"success": True, "username": payload["username"]})
+        return jsonify({"success": True, "username": payload["username"], "role": payload.get("role", "customer")})
     except jwt.ExpiredSignatureError:
         return jsonify({"success": False, "message": "Token đã hết hạn!"})
     except Exception:
@@ -399,6 +424,201 @@ def api_post_review(product_id):
         if "UNIQUE constraint failed" in str(e):
             return jsonify({"success": False, "message": "Bạn đã bình luận sản phẩm này rồi!"}), 400
         return jsonify({"success": False, "message": "Lỗi khi gửi bình luận!"}), 500
+
+
+def check_is_admin(username):
+    conn = customer_db.connect()
+    row = conn.execute("SELECT role FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    return row and row["role"] == "admin"
+
+@app.route("/api/admin/products", methods=["POST"])
+def api_admin_add_product():
+    username = get_username_from_request()
+    if not check_is_admin(username):
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    
+    
+    # Lấy dữ liệu từ form-data hoặc JSON
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        data = request.form
+        image_url = data.get("image", "")
+        file = request.files.get("image_file")
+        if file and file.filename:
+            import uuid
+            filename = f"{uuid.uuid4().hex}_{file.filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            # URL relative to backend
+            image_url = f"http://localhost:5000/uploads/{filename}"
+    else:
+        data = request.json or {}
+        image_url = data.get("image", "")
+        
+    name = data.get("name", "")
+    description = data.get("description", "")
+    
+    # Dịch tự động bằng Google Translate
+    name_en = ""
+    description_en = ""
+    try:
+        translator = GoogleTranslator(source='auto', target='en')
+        if name: name_en = translator.translate(name)
+        if description: description_en = translator.translate(description)
+    except Exception as e:
+        print("Lỗi dịch:", e)
+        
+    conn = db.connect()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO products (name, name_en, description, description_en, price, original_price, stock, location, category_id, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name,
+                name_en,
+                description,
+                description_en,
+                int(data.get("price", 0)),
+                int(data.get("originalPrice", 0)),
+                int(data.get("stock", 0)),
+                data.get("location", ""),
+                int(data.get("categoryId", 1)),
+                image_url
+            )
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Thêm sản phẩm thành công", "product_id": cur.lastrowid})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/api/admin/products/<int:product_id>", methods=["PUT"])
+def api_admin_update_product(product_id):
+    username = get_username_from_request()
+    if not check_is_admin(username):
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        data = request.form
+        image_url = data.get("image", "")
+        file = request.files.get("image_file")
+        if file and file.filename:
+            import uuid
+            filename = f"{uuid.uuid4().hex}_{file.filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            image_url = f"http://localhost:5000/uploads/{filename}"
+    else:
+        data = request.json or {}
+        image_url = data.get("image", "")
+        
+    name = data.get("name", "")
+    description = data.get("description", "")
+    
+    # Dịch tự động bằng Google Translate
+    name_en = ""
+    description_en = ""
+    try:
+        translator = GoogleTranslator(source='auto', target='en')
+        if name: name_en = translator.translate(name)
+        if description: description_en = translator.translate(description)
+    except Exception as e:
+        print("Lỗi dịch:", e)
+        
+    conn = db.connect()
+    try:
+        conn.execute(
+            """
+            UPDATE products
+            SET name = ?, name_en = ?, description = ?, description_en = ?, price = ?, original_price = ?, stock = ?, location = ?, category_id = ?, image = ?, updated_at = datetime('now','localtime')
+            WHERE id = ?
+            """,
+            (
+                name,
+                name_en,
+                description,
+                description_en,
+                int(data.get("price", 0)),
+                int(data.get("originalPrice", 0)),
+                int(data.get("stock", 0)),
+                data.get("location", ""),
+                int(data.get("categoryId", 1)),
+                image_url,
+                product_id
+            )
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Cập nhật sản phẩm thành công"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/api/admin/products/<int:product_id>", methods=["DELETE"])
+def api_admin_delete_product(product_id):
+    username = get_username_from_request()
+    if not check_is_admin(username):
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    
+    conn = db.connect()
+    try:
+        conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        conn.commit()
+        return jsonify({"success": True, "message": "Xóa sản phẩm thành công"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/api/admin/reviews/<int:review_id>", methods=["DELETE"])
+def api_admin_delete_review(review_id):
+    username = get_username_from_request()
+    if not check_is_admin(username):
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    
+    conn = db.connect()
+    try:
+        conn.execute("DELETE FROM reviews WHERE id = ?", (review_id,))
+        conn.commit()
+        return jsonify({"success": True, "message": "Xóa bình luận thành công"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/api/admin/test-order", methods=["POST"])
+def api_admin_test_order():
+    username = get_username_from_request()
+    if not check_is_admin(username):
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    
+    data = request.json or {}
+    buyer = data.get("buyer", "admin")
+    total = int(data.get("total", 0))
+    note = data.get("note", "Test Order")
+    delivery_date = data.get("deliveryDate", "")
+    
+    conn = db.connect()
+    try:
+        cur = conn.execute(
+            "INSERT INTO orders (username, total, status, note, delivery_date) VALUES (?, ?, ?, ?, ?)",
+            (buyer, total, "pending", note, delivery_date)
+        )
+        order_id = cur.lastrowid
+        conn.commit()
+        return jsonify({"success": True, "message": "Tạo đơn hàng test thành công", "order_id": order_id})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

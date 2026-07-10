@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ShoppingCart, LogIn, Truck, Bell } from "lucide-react";
 import { POPULAR_SEARCHES } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
-import { logout, getUsername } from "../../config/auth";
+import { logout, getUsername, isAdmin } from "../../config/auth";
 
 export default function Header({ t, lang, onLangChange }) {
   const { filters, search, cartCount, notifications, unreadNotificationsCount, markNotificationsAsRead } = useApp();
@@ -125,6 +125,16 @@ export default function Header({ t, lang, onLangChange }) {
                     fontSize: "14px", cursor: "pointer", whiteSpace: "nowrap" }}>
                   <LogIn size={16} />
                   {t.loginBtn}
+                </button>
+              )}
+              
+              {username && isAdmin() && (
+                <button type="button" onClick={() => navigate("/admin")}
+                  style={{ display: "flex", alignItems: "center", gap: "6px",
+                    background: "#0f766e", color: "#fff", border: "none",
+                    borderRadius: "8px", padding: "8px 16px", fontWeight: 600,
+                    fontSize: "14px", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  Admin
                 </button>
               )}
 
