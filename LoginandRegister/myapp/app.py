@@ -12,7 +12,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from database import Database
+from database import Database, CustomerDatabase
 from seed_data import seed_all
 from ui_data import get_ui_data
 from shipper_routes import shipper_bp
@@ -28,12 +28,14 @@ from shop import (
     update_cart_item,
     remove_from_cart,
     checkout_cart,
+    get_user_orders,
     filter_products,
     parse_filters_from_request,
 )
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "eventrent-secret-2026")
+app.config["JSON_AS_ASCII"] = False   # trả về UTF-8 tiếng Việt đúng chuẩn
 SECRET_KEY = app.secret_key
 
 SHOP_URL = os.environ.get("SHOP_URL", "http://localhost:3000")
@@ -48,7 +50,10 @@ app.register_blueprint(shipper_bp)
 
 db = Database()
 db.init_tables()
-seed_all(db)
+
+customer_db = CustomerDatabase()
+customer_db.init_tables()
+seed_all(db, customer_db, force=True)
 
 
 def get_username_from_request():
@@ -75,7 +80,7 @@ def register():
     if not username or not password:
         return jsonify({"success": False, "message": "Vui lòng nhập đầy đủ!"})
 
-    conn = db.connect()
+    conn = customer_db.connect()
     existing = conn.execute(
         "SELECT 1 FROM users WHERE username=?", (username,)
     ).fetchone()
@@ -99,7 +104,7 @@ def login():
     username = data.get("username", "").strip()
     password = data.get("password", "").strip()
 
-    conn = db.connect()
+    conn = customer_db.connect()
     row = conn.execute(
         "SELECT password FROM users WHERE username=?", (username,)
     ).fetchone()
@@ -268,6 +273,132 @@ def api_checkout():
         return jsonify({"success": False, "message": message}), 400
 
     return jsonify({"success": True, "message": message, "total": total})
+
+
+@app.route("/api/orders", methods=["GET"])
+def api_get_orders():
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"success": False, "message": "Chưa đăng nhập!"}), 401
+    orders = get_user_orders(db, username)
+    return jsonify({"success": True, "orders": orders})
+
+
+@app.route("/api/products/<int:product_id>/reviews", methods=["GET"])
+def api_get_reviews(product_id):
+    conn = db.connect()
+    rows = conn.execute(
+        """
+        SELECT r.id, r.username, r.rating, r.comment, r.created_at,
+               p.image as product_image
+        FROM reviews r
+        JOIN products p ON p.id = r.product_id
+        WHERE r.product_id = ?
+        ORDER BY r.created_at DESC
+        """,
+        (product_id,)
+    ).fetchall()
+    conn.close()
+    reviews = [
+        {
+            "id": row["id"],
+            "username": row["username"],
+            "rating": row["rating"],
+            "comment": row["comment"],
+            "createdAt": row["created_at"],
+            "productImage": row["product_image"],
+        }
+        for row in rows
+    ]
+    return jsonify({"success": True, "reviews": reviews})
+
+
+@app.route("/api/products/<int:product_id>/reviews", methods=["POST"])
+def api_post_review(product_id):
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"success": False, "message": "Bạn cần đăng nhập để bình luận!"}), 401
+
+    # Kiểm tra xem user đã thuê và đơn hàng đã giao thành công (status = 'completed') chưa
+    conn = db.connect()
+    purchased = conn.execute(
+        """
+        SELECT 1 FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE o.username = ? AND oi.product_id = ? AND o.status = 'completed'
+        LIMIT 1
+        """,
+        (username, product_id)
+    ).fetchone()
+
+    if not purchased:
+        conn.close()
+        return jsonify({"success": False, "message": "Bạn cần phải nhận được hàng (đơn hàng đã giao thành công) mới có thể bình luận!"}), 403
+
+    data = request.json or {}
+    rating = data.get("rating")
+    comment = data.get("comment", "").strip()
+
+    if not rating or not (1 <= int(rating) <= 5):
+        conn.close()
+        return jsonify({"success": False, "message": "Vui lòng chọn số sao từ 1–5!"}), 400
+
+    if not comment:
+        conn.close()
+        return jsonify({"success": False, "message": "Vui lòng nhập nội dung bình luận!"}), 400
+
+    try:
+        conn.execute(
+            """
+            INSERT INTO reviews (product_id, username, rating, comment)
+            VALUES (?, ?, ?, ?)
+            """,
+            (product_id, username, int(rating), comment)
+        )
+
+        # Tính toán lại rating trung bình và cập nhật vào bảng products
+        avg_row = conn.execute(
+            "SELECT AVG(rating) FROM reviews WHERE product_id = ?",
+            (product_id,)
+        ).fetchone()
+        
+        if avg_row and avg_row[0] is not None:
+            new_avg = round(float(avg_row[0]), 1)
+            conn.execute(
+                "UPDATE products SET rating = ? WHERE id = ?",
+                (new_avg, product_id)
+            )
+
+        conn.commit()
+
+        # Trả về review mới kèm thông tin ảnh sản phẩm
+        row = conn.execute(
+            """
+            SELECT r.id, r.username, r.rating, r.comment, r.created_at,
+                   p.image as product_image
+            FROM reviews r
+            JOIN products p ON p.id = r.product_id
+            WHERE r.product_id = ? AND r.username = ?
+            ORDER BY r.created_at DESC LIMIT 1
+            """,
+            (product_id, username)
+        ).fetchone()
+        conn.close()
+
+        review = {
+            "id": row["id"],
+            "username": row["username"],
+            "rating": row["rating"],
+            "comment": row["comment"],
+            "createdAt": row["created_at"],
+            "productImage": row["product_image"],
+        }
+        return jsonify({"success": True, "message": "Đã gửi bình luận!", "review": review})
+    except Exception as e:
+        conn.close()
+        if "UNIQUE constraint failed" in str(e):
+            return jsonify({"success": False, "message": "Bạn đã bình luận sản phẩm này rồi!"}), 400
+        return jsonify({"success": False, "message": "Lỗi khi gửi bình luận!"}), 500
 
 
 if __name__ == "__main__":

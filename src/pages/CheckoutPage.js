@@ -5,11 +5,13 @@ import { formatPrice } from "../data/mockData";
 import { useApp } from "../context/AppContext";
 import { isLoggedIn } from "../config/auth";
 import { checkoutCart } from "../services/shopApi";
+import { translations } from "../data/i18n";
 import "../styles/checkout.css";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, cartTotal, showToast, clearCart } = useApp();
+  const { cart, cartTotal, showToast, clearCart, lang } = useApp();
+  const t = translations[lang] || translations.vi;
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,9 +20,9 @@ export default function CheckoutPage() {
     return (
       <div className="checkout-page">
         <div className="container checkout-empty">
-          <p>Bạn cần đăng nhập để thanh toán.</p>
+          <p>{t.loginRequired}</p>
           <Link to="/auth?mode=login" className="btn-primary">
-            Đăng nhập
+            {t.loginBtn}
           </Link>
         </div>
       </div>
@@ -31,9 +33,9 @@ export default function CheckoutPage() {
     return (
       <div className="checkout-page">
         <div className="container checkout-empty">
-          <p>Giỏ thuê đang trống.</p>
+          <p>{t.cartEmptyMsg}</p>
           <Link to="/" className="btn-primary">
-            Khám phá thiết bị
+            {t.exploreEquipment}
           </Link>
         </div>
       </div>
@@ -46,23 +48,55 @@ export default function CheckoutPage() {
     try {
       const result = await checkoutCart(cart, note);
       clearCart();
-      showToast(result.message || "Đặt thuê thành công!");
+      showToast(result.message || (lang === "en" ? "Order placed successfully!" : "Đặt thuê thành công!"));
       navigate("/", { replace: true });
     } catch (err) {
-      showToast(err.message || "Không thể đặt thuê. Vui lòng thử lại.");
+      // Nếu backend không chạy (offline mode) → lưu đơn vào localStorage
+      const isOffline =
+        err.message?.includes("fetch") ||
+        err.message?.includes("server") ||
+        err.message?.includes("Failed") ||
+        err.message?.includes("NetworkError") ||
+        err.message?.includes("python") ||
+        err.message?.includes("Python");
+
+      if (isOffline) {
+        const orderId = `EVR-${Date.now().toString().slice(-6)}`;
+        const localOrder = {
+          id: orderId,
+          items: cart.map((i) => ({ product_name: i.name, price: i.price, quantity: i.quantity, days: i.days })),
+          total: cartTotal,
+          status: "pending",
+          note: note,
+          created_at: new Date().toLocaleString("sv-SE"),
+        };
+        const existing = JSON.parse(localStorage.getItem("local_orders") || "[]");
+        localStorage.setItem("local_orders", JSON.stringify([localOrder, ...existing]));
+        clearCart();
+        showToast(lang === "en" ? "Order placed! (Offline mode)" : "Đặt thuê thành công! (Chế độ offline)");
+        navigate("/", { replace: true });
+      } else {
+        showToast(err.message || (lang === "en" ? "Could not place order. Please try again." : "Không thể đặt thuê. Vui lòng thử lại."));
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const paymentOptions = [
+    { id: "cod", label: t.paymentCOD },
+    { id: "transfer", label: t.paymentTransfer },
+    { id: "momo", label: t.paymentMomo },
+  ];
 
   return (
     <div className="checkout-page">
       <header className="checkout-header">
         <div className="container checkout-header__inner">
           <Link to="/cart" className="checkout-header__back">
-            <ArrowLeft size={18} /> Quay lại giỏ hàng
+            <ArrowLeft size={18} /> {t.backToCart}
           </Link>
-          <h1>Thanh toán</h1>
+          <h1>{t.checkoutTitle}</h1>
         </div>
       </header>
 
@@ -70,16 +104,15 @@ export default function CheckoutPage() {
         <div className="checkout-main">
           <section className="checkout-card">
             <h2>
-              <MapPin size={20} /> Địa điểm nhận thiết bị
+              <MapPin size={20} /> {t.deliveryAddress}
             </h2>
             <p className="checkout-address">
-              {cart[0]?.location || "Hồ Chí Minh"} — nhân viên sẽ liên hệ xác nhận
-              địa chỉ giao/lắp đặt sau khi đặt thuê.
+              {cart[0]?.location || "Hồ Chí Minh"} — {t.deliveryNote}
             </p>
           </section>
 
           <section className="checkout-card">
-            <h2>Sản phẩm thuê ({cart.length})</h2>
+            <h2>{t.rentalItems} ({cart.length})</h2>
             <ul className="checkout-items">
               {cart.map((item) => (
                 <li key={item.id} className="checkout-item">
@@ -87,8 +120,8 @@ export default function CheckoutPage() {
                   <div>
                     <strong>{item.name}</strong>
                     <p>
-                      {formatPrice(item.price)}/ngày × {item.quantity} × {item.days}{" "}
-                      ngày
+                      {formatPrice(item.price)}/{t.perDay} × {item.quantity} × {item.days}{" "}
+                      {t.perDay}
                     </p>
                   </div>
                   <span>{formatPrice(item.price * item.quantity * item.days)}</span>
@@ -96,26 +129,22 @@ export default function CheckoutPage() {
               ))}
             </ul>
             <label className="checkout-note">
-              Ghi chú
+              {t.orderNote}
               <textarea
                 rows={2}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Yêu cầu lắp đặt, khung giờ giao..."
+                placeholder={t.orderNotePlaceholder}
               />
             </label>
           </section>
 
           <section className="checkout-card">
             <h2>
-              <CreditCard size={20} /> Phương thức thanh toán
+              <CreditCard size={20} /> {t.paymentMethod}
             </h2>
             <div className="checkout-payments">
-              {[
-                { id: "cod", label: "Thanh toán khi nhận thiết bị" },
-                { id: "transfer", label: "Chuyển khoản ngân hàng" },
-                { id: "momo", label: "Ví MoMo" },
-              ].map((opt) => (
+              {paymentOptions.map((opt) => (
                 <label
                   key={opt.id}
                   className={`checkout-payment ${
@@ -137,17 +166,17 @@ export default function CheckoutPage() {
         </div>
 
         <aside className="checkout-summary">
-          <h2>Tổng đơn thuê</h2>
+          <h2>{t.orderSummary}</h2>
           <div className="checkout-summary__row">
-            <span>Tạm tính</span>
+            <span>{t.subtotal}</span>
             <span>{formatPrice(cartTotal)}</span>
           </div>
           <div className="checkout-summary__row">
-            <span>Phí vận chuyển</span>
-            <span className="checkout-free">Miễn phí</span>
+            <span>{t.shippingFee}</span>
+            <span className="checkout-free">{t.freeShipping}</span>
           </div>
           <div className="checkout-summary__total">
-            <span>Tổng thanh toán</span>
+            <span>{t.totalPayment}</span>
             <strong>{formatPrice(cartTotal)}</strong>
           </div>
           <button
@@ -156,10 +185,10 @@ export default function CheckoutPage() {
             onClick={handlePlaceOrder}
             disabled={loading}
           >
-            {loading ? "Đang xử lý..." : "Đặt thuê"}
+            {loading ? t.processing : t.placeOrder}
           </button>
           <p className="checkout-secure">
-            <ShieldCheck size={16} /> Giao dịch an toàn
+            <ShieldCheck size={16} /> {t.secureTx}
           </p>
         </aside>
       </div>

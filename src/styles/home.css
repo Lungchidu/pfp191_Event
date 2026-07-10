@@ -989,3 +989,35 @@
     width: 100%;
   }
 }
+
+/* Priority product styling */
+.product-card.priority-card {
+  border: 2px solid #eab308;
+  position: relative;
+  box-shadow: 0 4px 15px rgba(234, 179, 8, 0.15);
+}
+
+.product-card.priority-card:hover {
+  box-shadow: 0 8px 20px rgba(234, 179, 8, 0.3);
+  border-color: #ca8a04;
+}
+
+.priority-badge {
+  background: rgba(234, 179, 8, 0.95);
+  color: #78350f;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 8px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  z-index: 10;
+  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+

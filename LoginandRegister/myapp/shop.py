@@ -197,31 +197,54 @@ def remove_from_cart(db, username, product_id):
 
 
 def _items_from_client(db, client_items):
-    """Lấy giá từ database theo danh sách React gửi lên."""
+    """Lấy thông tin sản phẩm.
+    - Nếu tìm thấy trong DB: dùng giá/tên từ DB (chính xác).
+    - Nếu không có trong DB (sản phẩm từ mockData): dùng dữ liệu client gửi lên
+      và đặt product_id = None để tránh vi phạm FK constraint.
+    """
     items = []
     for row in client_items:
-        product_id = int(row.get("product_id") or row.get("id"))
+        raw_id = row.get("product_id") or row.get("id")
+        product_id = int(raw_id) if raw_id else None
         quantity = max(1, int(row.get("quantity", 1)))
         days = max(1, int(row.get("days", 1)))
-        product = get_product_by_id(db, product_id)
-        if product is None:
-            return None, f"Không tìm thấy sản phẩm #{product_id}!"
-        items.append({
-            "id": product_id,
-            "name": product["name"],
-            "price": product["price"],
-            "image": product["image"],
-            "location": product["location"],
-            "quantity": quantity,
-            "days": days,
-        })
+
+        product = get_product_by_id(db, product_id) if product_id else None
+
+        if product:
+            items.append({
+                "db_id":    product_id,
+                "name":     product["name"],
+                "price":    product["price"],
+                "image":    product["image"],
+                "location": product["location"],
+                "quantity": quantity,
+                "days":     days,
+            })
+        else:
+            client_name  = row.get("name", f"Sản phẩm #{product_id}")
+            client_price = int(row.get("price", 0))
+            if not client_price:
+                continue
+            items.append({
+                "db_id":    None,
+                "name":     client_name,
+                "price":    client_price,
+                "image":    row.get("image", ""),
+                "location": row.get("location", ""),
+                "quantity": quantity,
+                "days":     days,
+            })
+
+    if not items:
+        return None, "Không có sản phẩm hợp lệ trong giỏ!"
     return items, None
 
 
 def checkout_cart(db, username, client_items=None, note=""):
     """Đặt thuê: lưu đơn hàng và xóa giỏ.
 
-  client_items: giỏ từ React (localStorage) — ưu tiên dùng khi có.
+    client_items: giỏ từ React (localStorage) — ưu tiên dùng khi có.
     """
     if client_items:
         items, err = _items_from_client(db, client_items)
@@ -230,35 +253,96 @@ def checkout_cart(db, username, client_items=None, note=""):
     else:
         items = get_cart_items(db, username)
 
-    if len(items) == 0:
+    if not items:
         return False, "Giỏ thuê đang trống!", 0
 
-    total = calc_cart_total(items)
+    total = sum(i["price"] * i["quantity"] * i["days"] for i in items)
     conn = db.connect()
     try:
+        conn.execute("PRAGMA foreign_keys = OFF")
+
         cur = conn.execute(
             "INSERT INTO orders (username, total, note) VALUES (?, ?, ?)",
             (username, total, note or ""),
         )
         order_id = cur.lastrowid
+
         for item in items:
+            pid = item.get("db_id")
             conn.execute(
                 """
                 INSERT INTO order_items
-                (order_id, product_id, product_name, price, quantity, days)
+                    (order_id, product_id, product_name, price, quantity, days)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     order_id,
-                    item["id"],
+                    pid,
                     item["name"],
                     item["price"],
                     item["quantity"],
                     item["days"],
                 ),
             )
+
         conn.execute("DELETE FROM cart_items WHERE username = ?", (username,))
         conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        raise e
+    finally:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.close()
+        except Exception:
+            pass
+
+    return True, f"Đặt thuê thành công! Tổng: {total:,}đ", total
+
+
+def get_user_orders(db, username):
+    conn = db.connect()
+    try:
+        order_rows = conn.execute(
+            "SELECT * FROM orders WHERE username = ? ORDER BY id DESC",
+            (username,)
+        ).fetchall()
+        
+        orders = []
+        for row in order_rows:
+            order_id = row["id"]
+            item_rows = conn.execute(
+                """
+                SELECT oi.*, p.image, p.location
+                FROM order_items oi
+                LEFT JOIN products p ON p.id = oi.product_id
+                WHERE oi.order_id = ?
+                """,
+                (order_id,)
+            ).fetchall()
+            
+            items = []
+            for item in item_rows:
+                items.append({
+                    "id": item["product_id"],
+                    "product_name": item["product_name"],
+                    "price": item["price"],
+                    "quantity": item["quantity"],
+                    "days": item["days"],
+                    "image": item["image"] or "",
+                    "location": item["location"] or ""
+                })
+            
+            orders.append({
+                "id": f"EVR-2026-{order_id:03d}",
+                "db_id": order_id,
+                "total": row["total"],
+                "status": row["status"],
+                "note": row["note"],
+                "created_at": row["created_at"],
+                "items": items
+            })
+        return orders
     finally:
         conn.close()
-    return True, f"Đặt thuê thành công! Tổng: {total:,}đ", total

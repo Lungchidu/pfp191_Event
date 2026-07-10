@@ -1,8 +1,9 @@
 import { FLASH_PRODUCTS, formatPrice } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
+import { translateProduct } from "../../data/i18n";
 
 export default function FlashRental({ title, seeMore }) {
-  const { goToProduct, addToCart, updateFilters } = useApp();
+  const { goToProduct, addToCart, updateFilters, lang } = useApp();
 
   return (
     <section className="container section-card" id="flash">
@@ -22,7 +23,8 @@ export default function FlashRental({ title, seeMore }) {
         </button>
       </div>
       <div className="flash-sale">
-        {FLASH_PRODUCTS.map((product) => {
+        {FLASH_PRODUCTS.map((p) => {
+          const product = translateProduct(p, lang);
           const percent = Math.round(
             (product.sold / product.stock) * 100
           );
@@ -56,7 +58,7 @@ export default function FlashRental({ title, seeMore }) {
                   style={{ width: `${percent}%` }}
                 />
                 <span className="flash-card__progress-label">
-                  Đã thuê {product.sold}
+                  {lang === "en" ? `Rented ${product.sold}` : `Đã thuê ${product.sold}`}
                 </span>
               </div>
               <button
@@ -67,7 +69,7 @@ export default function FlashRental({ title, seeMore }) {
                   addToCart(product, 1, 1);
                 }}
               >
-                Thuê ngay
+                {lang === "en" ? "Rent now" : "Thuê ngay"}
               </button>
             </article>
           );
@@ -76,3 +78,4 @@ export default function FlashRental({ title, seeMore }) {
     </section>
   );
 }
+

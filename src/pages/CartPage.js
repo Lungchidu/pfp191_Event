@@ -3,6 +3,7 @@ import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react";
 import { formatPrice } from "../data/mockData";
 import { useApp } from "../context/AppContext";
 import { isLoggedIn } from "../config/auth";
+import { translations } from "../data/i18n";
 import "../styles/cart.css";
 
 export default function CartPage() {
@@ -12,7 +13,9 @@ export default function CartPage() {
     cartTotal,
     updateCartItem,
     removeFromCart,
+    lang,
   } = useApp();
+  const t = translations[lang] || translations.vi;
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
@@ -27,16 +30,16 @@ export default function CartPage() {
     <div className="cart-page">
       <div className="container">
         <Link to="/" className="cart-page__back">
-          <ArrowLeft size={18} /> Tiếp tục thuê thiết bị
+          <ArrowLeft size={18} /> {t.continueRenting}
         </Link>
 
-        <h1>Giỏ thuê ({cart.length} mặt hàng)</h1>
+        <h1>{t.cartTitle} ({cart.length} {t.items})</h1>
 
         {cart.length === 0 ? (
           <div className="cart-empty">
-            <p>Giỏ thuê đang trống.</p>
+            <p>{t.cartEmpty}</p>
             <Link to="/" className="btn-primary">
-              Khám phá thiết bị
+              {t.exploreEquipment}
             </Link>
           </div>
         ) : (
@@ -49,7 +52,7 @@ export default function CartPage() {
                     <h3>{item.name}</h3>
                     <p>{item.location}</p>
                     <p className="cart-item__price">
-                      {formatPrice(item.price)}/ngày
+                      {formatPrice(item.price)}/{t.perDay}
                     </p>
                   </div>
 
@@ -61,7 +64,7 @@ export default function CartPage() {
                           quantity: item.quantity - 1,
                         })
                       }
-                      aria-label="Giảm số lượng"
+                      aria-label={lang === "en" ? "Decrease quantity" : "Giảm số lượng"}
                     >
                       <Minus size={16} />
                     </button>
@@ -73,7 +76,7 @@ export default function CartPage() {
                           quantity: item.quantity + 1,
                         })
                       }
-                      aria-label="Tăng số lượng"
+                      aria-label={lang === "en" ? "Increase quantity" : "Tăng số lượng"}
                     >
                       <Plus size={16} />
                     </button>
@@ -81,7 +84,7 @@ export default function CartPage() {
 
                   <div className="cart-item__days">
                     <label>
-                      Ngày
+                      {t.days}
                       <input
                         type="number"
                         min={1}
@@ -108,7 +111,7 @@ export default function CartPage() {
                     type="button"
                     className="cart-item__remove"
                     onClick={() => removeFromCart(item.id)}
-                    aria-label="Xóa"
+                    aria-label={lang === "en" ? "Remove" : "Xóa"}
                   >
                     <Trash2 size={18} />
                   </button>
@@ -118,7 +121,7 @@ export default function CartPage() {
 
             <div className="cart-summary">
               <div>
-                <span>Tổng cộng</span>
+                <span>{t.totalLabel}</span>
                 <strong>{formatPrice(cartTotal)}</strong>
               </div>
               <button
@@ -126,7 +129,7 @@ export default function CartPage() {
                 className="btn-primary"
                 onClick={handleCheckout}
               >
-                Thanh toán
+                {t.checkoutBtn}
               </button>
             </div>
           </>

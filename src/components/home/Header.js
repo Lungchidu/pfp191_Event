@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShoppingCart, LogIn } from "lucide-react";
+import { ShoppingCart, LogIn, Truck, Bell } from "lucide-react";
 import { POPULAR_SEARCHES } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
 import { logout, getUsername } from "../../config/auth";
 
 export default function Header({ t, lang, onLangChange }) {
-  const { filters, search, cartCount } = useApp();
+  const { filters, search, cartCount, notifications, unreadNotificationsCount, markNotificationsAsRead } = useApp();
   const navigate = useNavigate();
   const [input, setInput] = useState(filters.query);
   const [username, setUsername] = useState(() => getUsername());
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
 
   useEffect(() => {
     setInput(filters.query);
@@ -42,24 +43,12 @@ export default function Header({ t, lang, onLangChange }) {
         <div className="container top-bar__inner">
           <div className="top-bar__links">
             <button type="button" className="top-bar__link-btn"
-              onClick={() => alert("Kênh nhà cung cấp — sẽ kết nối backend sau.")}>
-              {t.sellerCenter}
-            </button>
-            <button type="button" className="top-bar__link-btn"
-              onClick={() => alert("Tải app EventRent — QR sẽ có khi publish.")}>
-              {t.downloadApp}
-            </button>
-            <button type="button" className="top-bar__link-btn"
               onClick={() => alert("Hotline hỗ trợ: 1900-xxxx")}>
               {t.help}
             </button>
           </div>
 
           <div className="top-bar__social">
-            <span>FB</span>
-            <span>IG</span>
-            <span>YT</span>
-
             <div className="top-bar__auth">
               {username ? (
                 <>
@@ -127,7 +116,7 @@ export default function Header({ t, lang, onLangChange }) {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
               {!username && (
                 <button type="button" onClick={() => navigate("/auth?mode=login")}
                   style={{ display: "flex", alignItems: "center", gap: "6px",
@@ -135,9 +124,83 @@ export default function Header({ t, lang, onLangChange }) {
                     borderRadius: "8px", padding: "8px 16px", fontWeight: 600,
                     fontSize: "14px", cursor: "pointer", whiteSpace: "nowrap" }}>
                   <LogIn size={16} />
-                  Đăng nhập
+                  {t.loginBtn}
                 </button>
               )}
+
+              {/* Notification Center */}
+              <div className="header-notification-container" style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="header-cart"
+                  onClick={() => {
+                    setShowNotifDropdown(!showNotifDropdown);
+                    markNotificationsAsRead();
+                  }}
+                  style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}
+                >
+                  <div className="header-cart__icon" style={{ position: "relative" }}>
+                    <Bell size={22} />
+                    {unreadNotificationsCount > 0 && (
+                      <span className="header-cart__badge" style={{ background: "#ef4444" }}>{unreadNotificationsCount}</span>
+                    )}
+                  </div>
+                  <span>{t.notifications}</span>
+                </button>
+                
+                {showNotifDropdown && (
+                  <div className="notif-dropdown" style={{
+                    position: "absolute",
+                    top: "100%",
+                    right: 0,
+                    width: "320px",
+                    background: "#fff",
+                    borderRadius: "8px",
+                    boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+                    zIndex: 1000,
+                    color: "#333",
+                    padding: "12px",
+                    marginTop: "8px",
+                    border: "1px solid #e2e8f0",
+                    textAlign: "left"
+                  }}>
+                    <h3 style={{ margin: "0 0 10px 0", fontSize: "15px", fontWeight: 700, borderBottom: "1px solid #f1f5f9", paddingBottom: "8px", color: "#0f766e" }}>
+                      🔔 {t.latestNotif}
+                    </h3>
+                    {notifications.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: "13px", color: "#64748b", padding: "10px 0", textAlign: "center" }}>{t.noNotif}</p>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
+                        {notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            style={{
+                              padding: "8px",
+                              borderRadius: "6px",
+                              background: notif.type === "warning" ? "#fffbeb" : "#f8fafc",
+                              borderLeft: notif.type === "warning" ? "4px solid #f59e0b" : "4px solid #0d9488",
+                              fontSize: "13px"
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, color: notif.type === "warning" ? "#b45309" : "#0f766e", marginBottom: "2px" }}>
+                              {notif.title}
+                            </div>
+                            <div style={{ color: "#475569", lineHeight: "1.4" }}>{notif.message}</div>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>{notif.date}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <Link to="/order-tracking" className="header-cart">
+                <div className="header-cart__icon">
+                  <Truck size={22} />
+                </div>
+                <span>{t.tracking}</span>
+              </Link>
               <Link to="/cart" className="header-cart">
                 <div className="header-cart__icon">
                   <ShoppingCart size={22} />

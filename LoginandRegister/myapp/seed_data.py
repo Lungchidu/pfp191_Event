@@ -20,7 +20,7 @@ import bcrypt
 
 # Cho phép chạy trực tiếp từ thư mục này
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from database import Database
+from database import Database, CustomerDatabase
 
 # ──────────────────────────────────────────────────────────────
 # Dữ liệu mẫu
@@ -146,7 +146,7 @@ PRODUCTS = [
         "sold": 120, "stock": 200, "rating": 4.4,
         "location": "Đà Nẵng", "category_id": 5, "is_flash": 0,
         "tags":  ["bàn ghế", "wedding", "banquet"],
-        "image": "https://images.unsplash.com/photo-1464366400600-6394ab3a9c32?w=800&q=80",
+        "image": "https://images.unsplash.com/photo-1532712938310-34cb3982ef74?w=800&q=80",
         "specs": ["10 bàn", "80 ghế", "Kèm phủ"],
     },
     # ── Màn hình LED ─────────────────────────────────────────
@@ -158,7 +158,7 @@ PRODUCTS = [
         "sold": 6,   "stock": 15, "rating": 4.9,
         "location": "Hồ Chí Minh", "category_id": 6, "is_flash": 1,
         "tags":  ["led", "màn hình", "indoor"],
-        "image": "https://images.unsplash.com/photo-1598488035139-bdcb86d0b0b2?w=800&q=80",
+        "image": "https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=800&q=80",
         "specs": ["P3.9", "Indoor", "Kèm processor"],
     },
     {
@@ -181,7 +181,7 @@ PRODUCTS = [
         "sold": 42,  "stock": 60, "rating": 4.5,
         "location": "Hà Nội", "category_id": 7, "is_flash": 0,
         "tags":  ["máy chiếu", "projector", "hội thảo"],
-        "image": "https://images.unsplash.com/photo-1478720568477-152d9b164e63?w=800&q=80",
+        "image": "https://images.unsplash.com/photo-1535016120720-40c646be5580?w=800&q=80",
         "specs": ["8000lm", "Full HD", "Màn 120 inch"],
     },
     # ── Micro & DJ ───────────────────────────────────────────
@@ -193,7 +193,7 @@ PRODUCTS = [
         "sold": 67,  "stock": 90, "rating": 4.8,
         "location": "Hồ Chí Minh", "category_id": 8, "is_flash": 0,
         "tags":  ["micro", "shure", "không dây"],
-        "image": "https://images.unsplash.com/photo-1598488035139-bdcb86d0b0b2?w=800&q=80",
+        "image": "https://images.unsplash.com/photo-1590602847861-f357a9332bbc?w=800&q=80",
         "specs": ["UHF", "3 micro", "Pin 8h"],
     },
     # ── Generator ────────────────────────────────────────────
@@ -241,7 +241,7 @@ PRODUCTS = [
         "sold": 28,  "stock": 20, "rating": 5.0,
         "location": "Hồ Chí Minh", "category_id": 15, "is_flash": 0,
         "tags":  ["kỹ thuật viên", "sound engineer", "nhân sự"],
-        "image": "https://images.unsplash.com/photo-1598488035139-bdcb86d0b0b2?w=800&q=80",
+        "image": "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&q=80",
         "specs": ["1 ngày 8h", "Kinh nghiệm 5+ năm", "Kèm tư vấn"],
     },
     # ── Gói combo ────────────────────────────────────────────
@@ -277,6 +277,42 @@ PRODUCTS = [
         "tags":  ["combo", "concert", "festival"],
         "image": "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&q=80",
         "specs": ["500–1000 khách", "Full production", "Team 8 KTV"],
+    },
+    # ── Dây & Phụ kiện ───────────────────────────────────────
+    {
+        "id": 25,
+        "name": "Cuộn dây cáp tín hiệu XLR 50m",
+        "description": "Dây cáp tín hiệu âm thanh XLR chuyên dụng chống nhiễu, lõi đồng chất lượng cao.",
+        "price": 150_000,    "original_price": 200_000, "discount": 25,
+        "sold": 90,  "stock": 150, "rating": 4.8,
+        "location": "Hà Nội", "category_id": 10, "is_flash": 0,
+        "tags":  ["cáp tín hiệu", "phụ kiện", "dây xlr"],
+        "image": "https://images.unsplash.com/photo-1516223725307-6f76b9ec8742?w=800&q=80",
+        "specs": ["Chiều dài 50m", "Hãng Soundking", "Chống nhiễu tốt"],
+    },
+    # ── Trang trí ────────────────────────────────────────────
+    {
+        "id": 26,
+        "name": "Gói hoa tươi trang trí lối đi sân khấu",
+        "description": "Trang trí thảm đỏ và hoa tươi lối đi, thiết kế chuyên nghiệp theo tone màu chủ đạo của tiệc.",
+        "price": 1_200_000,  "original_price": 1_600_000, "discount": 25,
+        "sold": 40,  "stock": 50, "rating": 4.9,
+        "location": "Đà Nẵng", "category_id": 11, "is_flash": 0,
+        "tags":  ["trang trí", "hoa tươi", "wedding"],
+        "image": "https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=800&q=80",
+        "specs": ["Hoa hồng/Cẩm tú cầu", "Kèm chân sắt nghệ thuật", "Thiết kế theo tone màu"],
+    },
+    # ── Backline ─────────────────────────────────────────────
+    {
+        "id": 27,
+        "name": "Bộ trống Jazz Yamaha Stage Custom",
+        "description": "Bộ trống Jazz cao cấp phục vụ biểu diễn live band, âm thanh uy lực chuẩn concert.",
+        "price": 1_500_000,  "original_price": 2_000_000, "discount": 25,
+        "sold": 12,  "stock": 15, "rating": 4.7,
+        "location": "Hà Nội", "category_id": 12, "is_flash": 0,
+        "tags":  ["trống", "backline", "nhạc cụ"],
+        "image": "https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?w=800&q=80",
+        "specs": ["Trống cơ 5 pcs", "Kèm cymbals Zildjian", "Hardware đầy đủ"],
     },
 ]
 
@@ -316,12 +352,13 @@ DEMO_WISHLIST = [
 # ──────────────────────────────────────────────────────────────
 # Hàm seed chính
 # ──────────────────────────────────────────────────────────────
-def seed_all(db: Database, force: bool = False) -> None:
+def seed_all(db: Database, customer_db: CustomerDatabase, force: bool = False) -> None:
     """
     Seed toàn bộ dữ liệu mẫu.
     force=True: xóa dữ liệu cũ và seed lại từ đầu.
     """
     conn = db.connect()
+    customer_conn = customer_db.connect()
 
     try:
         existing_products = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
@@ -330,8 +367,9 @@ def seed_all(db: Database, force: bool = False) -> None:
             return
 
         if force:
-            for tbl in ["reviews", "wishlist", "order_items", "cart_items", "orders", "products", "categories", "users"]:
+            for tbl in ["reviews", "wishlist", "order_items", "cart_items", "orders", "products", "categories"]:
                 conn.execute(f"DELETE FROM {tbl}")
+            customer_conn.execute("DELETE FROM users")
             print("[seed] Đã xóa dữ liệu cũ.")
 
         # ── Danh mục ──────────────────────────────────────────
@@ -364,7 +402,7 @@ def seed_all(db: Database, force: bool = False) -> None:
         # ── Tài khoản demo ────────────────────────────────────
         for u in DEMO_USERS:
             hashed = bcrypt.hashpw(u["password"].encode(), bcrypt.gensalt()).decode()
-            conn.execute(
+            customer_conn.execute(
                 """INSERT OR IGNORE INTO users
                    (username, password, email, full_name, phone, role)
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -390,10 +428,12 @@ def seed_all(db: Database, force: bool = False) -> None:
         print(f"[seed] Đã thêm {len(DEMO_WISHLIST)} wishlist items.")
 
         conn.commit()
+        customer_conn.commit()
         print("[seed] ✅ Seed hoàn tất!")
 
     finally:
         conn.close()
+        customer_conn.close()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -407,4 +447,6 @@ if __name__ == "__main__":
 
     db = Database()
     db.init_tables()
-    seed_all(db, force=args.force)
+    customer_db = CustomerDatabase()
+    customer_db.init_tables()
+    seed_all(db, customer_db, force=args.force)

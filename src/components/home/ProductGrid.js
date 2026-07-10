@@ -1,8 +1,9 @@
 import { formatPrice } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
+import { translateProduct } from "../../data/i18n";
 
 export default function ProductGrid({ t }) {
-  const { filteredProducts, goToProduct, addToCart, filters } =
+  const { filteredProducts, goToProduct, addToCart, filters, lang } =
     useApp();
 
   if (filteredProducts.length === 0) {
@@ -19,36 +20,47 @@ export default function ProductGrid({ t }) {
   return (
     <section className="container section-card">
       <div className="product-grid">
-        {filteredProducts.map((product) => (
-          <article
-            key={product.id}
-            className="product-card"
-            onClick={() => goToProduct(product.id)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") goToProduct(product.id);
-            }}
-            role="button"
-            tabIndex={0}
-          >
-            <div className="product-card__img">
-              <img src={product.image} alt={product.name} />
-              {product.isFlash && (
-                <span className="product-card__badge">Flash</span>
-              )}
-              {product.discount > 0 && (
-                <span className="product-card__discount">
-                  -{product.discount}%
-                </span>
-              )}
-            </div>
-            <div className="product-card__body">
-              <h3>{product.name}</h3>
+        {filteredProducts.map((p) => {
+          const product = translateProduct(p, lang);
+          const isPriority =
+            activeCategory &&
+            (product.categoryId === activeCategory ||
+              product.category_id === activeCategory);
+          return (
+            <article
+              key={product.id}
+              className={`product-card ${isPriority ? "priority-card" : ""}`}
+              onClick={() => goToProduct(product.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") goToProduct(product.id);
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="product-card__img">
+                <img src={product.image} alt={product.name} />
+                {product.isFlash && (
+                  <span className="product-card__badge">Flash</span>
+                )}
+                {product.discount > 0 && (
+                  <span className="product-card__discount">
+                    -{product.discount}%
+                  </span>
+                )}
+                {isPriority && (
+                  <div className="priority-badge">
+                    {lang === "en" ? "✨ ⭐ The product you are looking for ⭐ ✨" : "✨ ⭐ Sản phẩm bạn đang tìm kiếm ⭐ ✨"}
+                  </div>
+                )}
+              </div>
+              <div className="product-card__body">
+                <h3>{product.name}</h3>
               <p className="product-card__meta">
                 {product.location} · ⭐ {product.rating}
               </p>
               <p className="product-card__price">
                 {formatPrice(product.price)}
-                <span>/ngày</span>
+                <span>/{lang === "en" ? "day" : "ngày"}</span>
               </p>
               <button
                 type="button"
@@ -62,7 +74,8 @@ export default function ProductGrid({ t }) {
               </button>
             </div>
           </article>
-        ))}
+        );
+      })}
       </div>
       {activeCategory && (
         <p className="product-grid__note">{t.clickForDetail}</p>
@@ -70,3 +83,4 @@ export default function ProductGrid({ t }) {
     </section>
   );
 }
+

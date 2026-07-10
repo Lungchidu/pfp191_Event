@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { HERO_SLIDES, SIDE_BANNERS } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
+import { translateHero, translateSideBanner } from "../../data/i18n";
 
 export default function HeroSection() {
-  const { updateFilters } = useApp();
+  const { updateFilters, lang } = useApp();
   const [active, setActive] = useState(0);
 
   useEffect(() => {
@@ -24,35 +25,38 @@ export default function HeroSection() {
     <section className="hero-section container">
       <div className="hero-grid">
         <div className="hero-carousel">
-          {HERO_SLIDES.map((slide, index) => (
-            <div
-              key={slide.id}
-              className={`hero-carousel__slide ${
-                index === active ? "active" : ""
-              }`}
-            >
-              <img src={slide.image} alt={slide.title} />
-              <div className="hero-carousel__overlay">
-                <h2>
-                  {slide.title.split("\n").map((line, i) => (
-                    <span key={i}>
-                      {i > 0 && <br />}
-                      {line}
-                    </span>
-                  ))}
-                </h2>
-                <p>{slide.subtitle}</p>
-                <button
-                  type="button"
-                  className="hero-carousel__cta"
-                  style={{ background: slide.accent }}
-                  onClick={() => applyFilter(slide.filter)}
-                >
-                  {slide.cta}
-                </button>
+          {HERO_SLIDES.map((slide, index) => {
+            const translatedSlide = translateHero(slide, lang);
+            return (
+              <div
+                key={slide.id}
+                className={`hero-carousel__slide ${
+                  index === active ? "active" : ""
+                }`}
+              >
+                <img src={translatedSlide.image} alt={translatedSlide.title} />
+                <div className="hero-carousel__overlay">
+                  <h2>
+                    {translatedSlide.title.split("\n").map((line, i) => (
+                      <span key={i}>
+                        {i > 0 && <br />}
+                        {line}
+                      </span>
+                    ))}
+                  </h2>
+                  <p>{translatedSlide.subtitle}</p>
+                  <button
+                    type="button"
+                    className="hero-carousel__cta"
+                    style={{ background: translatedSlide.accent }}
+                    onClick={() => applyFilter(translatedSlide.filter)}
+                  >
+                    {translatedSlide.cta}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="hero-carousel__dots">
             {HERO_SLIDES.map((slide, index) => (
               <button
@@ -67,22 +71,26 @@ export default function HeroSection() {
         </div>
 
         <div className="hero-side">
-          {SIDE_BANNERS.map((banner) => (
-            <button
-              key={banner.id}
-              type="button"
-              className="hero-side__card"
-              onClick={() => applyFilter(banner.filter)}
-            >
-              <img src={banner.image} alt={banner.title} />
-              <div className="hero-side__text">
-                <h4>{banner.title}</h4>
-                <p>{banner.desc}</p>
-              </div>
-            </button>
-          ))}
+          {SIDE_BANNERS.map((banner) => {
+            const translatedBanner = translateSideBanner(banner, lang);
+            return (
+              <button
+                key={banner.id}
+                type="button"
+                className="hero-side__card"
+                onClick={() => applyFilter(translatedBanner.filter)}
+              >
+                <img src={translatedBanner.image} alt={translatedBanner.title} />
+                <div className="hero-side__text">
+                  <h4>{translatedBanner.title}</h4>
+                  <p>{translatedBanner.desc}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
   );
 }
+

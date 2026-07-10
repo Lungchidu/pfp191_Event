@@ -25,6 +25,7 @@ from datetime import datetime
 # ──────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE  = os.path.join(BASE_DIR, "event_rental.db")
+CUSTOMER_DB_FILE = os.path.join(BASE_DIR, "customers.db")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -48,19 +49,7 @@ class Database:
     def init_tables(self) -> None:
         conn = self.connect()
         try:
-            # ── Tài khoản người dùng ──────────────────────────────────
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    username   TEXT PRIMARY KEY,
-                    password   TEXT    NOT NULL,
-                    email      TEXT    DEFAULT '',
-                    full_name  TEXT    DEFAULT '',
-                    phone      TEXT    DEFAULT '',
-                    role       TEXT    DEFAULT 'customer',  -- 'customer' | 'admin'
-                    is_active  INTEGER DEFAULT 1,
-                    created_at TEXT    DEFAULT (datetime('now','localtime'))
-                )
-            """)
+            # ── Tài khoản người dùng (đã chuyển sang customers.db) ──
 
             # ── Danh mục sản phẩm ─────────────────────────────────────
             conn.execute("""
@@ -103,7 +92,6 @@ class Database:
                     quantity   INTEGER NOT NULL DEFAULT 1,
                     days       INTEGER NOT NULL DEFAULT 1,
                     PRIMARY KEY (username, product_id),
-                    FOREIGN KEY (username)   REFERENCES users(username)   ON DELETE CASCADE,
                     FOREIGN KEY (product_id) REFERENCES products(id)      ON DELETE CASCADE
                 )
             """)
@@ -116,25 +104,50 @@ class Database:
                     total      INTEGER NOT NULL DEFAULT 0,
                     status     TEXT    NOT NULL DEFAULT 'pending',
                     note       TEXT    DEFAULT '',
-                    created_at TEXT    DEFAULT (datetime('now','localtime')),
-                    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+                    created_at TEXT    DEFAULT (datetime('now','localtime'))
                 )
             """)
 
             # ── Chi tiết đơn hàng ─────────────────────────────────────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS order_items (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    order_id    INTEGER NOT NULL,
-                    product_id  INTEGER NOT NULL,
-                    product_name TEXT   NOT NULL,   -- snapshot tên lúc đặt
-                    price       INTEGER NOT NULL,   -- snapshot giá lúc đặt
-                    quantity    INTEGER NOT NULL DEFAULT 1,
-                    days        INTEGER NOT NULL DEFAULT 1,
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_id     INTEGER NOT NULL,
+                    product_id   INTEGER,           -- nullable: sản phẩm có thể bị xóa
+                    product_name TEXT    NOT NULL,   -- snapshot tên lúc đặt
+                    price        INTEGER NOT NULL,   -- snapshot giá lúc đặt
+                    quantity     INTEGER NOT NULL DEFAULT 1,
+                    days         INTEGER NOT NULL DEFAULT 1,
                     FOREIGN KEY (order_id)   REFERENCES orders(id)   ON DELETE CASCADE,
                     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
                 )
             """)
+
+            # ── Migration: nếu bảng cũ có product_id NOT NULL → recreate ──────
+            col_info = conn.execute("PRAGMA table_info(order_items)").fetchall()
+            pid_col = next((c for c in col_info if c["name"] == "product_id"), None)
+            if pid_col and pid_col["notnull"] == 1:
+                conn.execute("ALTER TABLE order_items RENAME TO order_items_old")
+                conn.execute("""
+                    CREATE TABLE order_items (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        order_id     INTEGER NOT NULL,
+                        product_id   INTEGER,
+                        product_name TEXT    NOT NULL,
+                        price        INTEGER NOT NULL,
+                        quantity     INTEGER NOT NULL DEFAULT 1,
+                        days         INTEGER NOT NULL DEFAULT 1,
+                        FOREIGN KEY (order_id)   REFERENCES orders(id)   ON DELETE CASCADE,
+                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+                    )
+                """)
+                conn.execute("""
+                    INSERT INTO order_items
+                        (id, order_id, product_id, product_name, price, quantity, days)
+                    SELECT id, order_id, product_id, product_name, price, quantity, days
+                    FROM order_items_old
+                """)
+                conn.execute("DROP TABLE order_items_old")
 
             # ── Đánh giá sản phẩm ─────────────────────────────────────
             conn.execute("""
@@ -146,8 +159,7 @@ class Database:
                     comment    TEXT    DEFAULT '',
                     created_at TEXT    DEFAULT (datetime('now','localtime')),
                     UNIQUE (product_id, username),
-                    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-                    FOREIGN KEY (username)   REFERENCES users(username) ON DELETE CASCADE
+                    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
                 )
             """)
 
@@ -158,7 +170,6 @@ class Database:
                     product_id INTEGER NOT NULL,
                     added_at   TEXT    DEFAULT (datetime('now','localtime')),
                     PRIMARY KEY (username, product_id),
-                    FOREIGN KEY (username)   REFERENCES users(username)  ON DELETE CASCADE,
                     FOREIGN KEY (product_id) REFERENCES products(id)     ON DELETE CASCADE
                 )
             """)
@@ -167,6 +178,41 @@ class Database:
         finally:
             conn.close()
 
+
+# ──────────────────────────────────────────────────────────────
+# Lớp CustomerDatabase
+# ──────────────────────────────────────────────────────────────
+class CustomerDatabase:
+    """Quản lý kết nối SQLite riêng cho khách hàng."""
+
+    def __init__(self, db_file: str = CUSTOMER_DB_FILE):
+        self.db_file = db_file
+
+    def connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        return conn
+
+    def init_tables(self) -> None:
+        conn = self.connect()
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    username   TEXT PRIMARY KEY,
+                    password   TEXT    NOT NULL,
+                    email      TEXT    DEFAULT '',
+                    full_name  TEXT    DEFAULT '',
+                    phone      TEXT    DEFAULT '',
+                    role       TEXT    DEFAULT 'customer',
+                    is_active  INTEGER DEFAULT 1,
+                    created_at TEXT    DEFAULT (datetime('now','localtime'))
+                )
+            """)
+            conn.commit()
+        finally:
+            conn.close()
 
 # ──────────────────────────────────────────────────────────────
 # Helper: chuyển Row → dict

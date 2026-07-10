@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage";
 import ProductPage from "./pages/ProductPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
+import OrderTrackingPage from "./pages/OrderTrackingPage";
 import Toast from "./components/Toast";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { saveUserFromUrl } from "./config/auth";
@@ -46,6 +47,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <CheckoutPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/order-tracking"
+          element={
+            <ProtectedRoute>
+              <OrderTrackingPage />
             </ProtectedRoute>
           }
         />

@@ -10,7 +10,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../data/mockData";
 import { isLoggedIn } from "../config/auth";
 import { fetchProducts } from "../services/shopApi";
- 
+import { translateProduct } from "../data/i18n";
+
 // ─── Không còn import filterProducts nữa ───────────────────
  
 const CART_KEY = "eventrent_cart";
@@ -34,6 +35,13 @@ export function AppProvider({ children }) {
   // ─── State mới: kết quả lọc từ Python backend ──────────
   const [filteredProducts, setFilteredProducts] = useState(PRODUCTS);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [lang, setLang] = useState(() => localStorage.getItem("lang") || "vi");
+
+  const changeLang = useCallback((newLang) => {
+    setLang(newLang);
+    localStorage.setItem("lang", newLang);
+  }, []);
+
  
   // ─── Đọc filters từ URL (giữ nguyên như cũ) ────────────
   const filters = useMemo(
@@ -53,14 +61,90 @@ export function AppProvider({ children }) {
   // ─── Mỗi khi filters thay đổi → gọi Python backend ────
   useEffect(() => {
     setLoadingProducts(true);
-    fetchProducts(filters)
-      .then((products) => setFilteredProducts(products))
+    // Không lọc danh mục và query ở backend để xử lý client-side cho đa ngôn ngữ
+    const apiFilters = { ...filters, categoryId: null, query: "" };
+    fetchProducts(apiFilters)
+      .then((products) => {
+        let sorted = [...products];
+
+        // Lọc theo query client-side với đa ngôn ngữ
+        if (filters.query) {
+          const q = filters.query.toLowerCase();
+          sorted = sorted.filter((p) => {
+            const translated = translateProduct(p, lang);
+            return (
+              translated.name.toLowerCase().includes(q) ||
+              translated.description.toLowerCase().includes(q) ||
+              (translated.tags && translated.tags.some((t) => t.toLowerCase().includes(q)))
+            );
+          });
+        }
+
+        if (filters.categoryId) {
+          const matched = sorted.filter(
+            (p) =>
+              p.categoryId === filters.categoryId ||
+              p.category_id === filters.categoryId
+          );
+          const unmatched = sorted.filter(
+            (p) =>
+              p.categoryId !== filters.categoryId &&
+              p.category_id !== filters.categoryId
+          );
+          sorted = [...matched, ...unmatched];
+        }
+        setFilteredProducts(sorted);
+      })
       .catch(() => {
         // Nếu backend chưa chạy → fallback dùng mockData
-        setFilteredProducts(PRODUCTS);
+        let result = [...PRODUCTS];
+        if (filters.query) {
+          const q = filters.query.toLowerCase();
+          result = result.filter((p) => {
+            const translated = translateProduct(p, lang);
+            return (
+              translated.name.toLowerCase().includes(q) ||
+              translated.description.toLowerCase().includes(q) ||
+              (translated.tags && translated.tags.some((t) => t.toLowerCase().includes(q)))
+            );
+          });
+        }
+        if (filters.location) {
+          result = result.filter((p) => p.location === filters.location);
+        }
+        if (filters.minRating > 0) {
+          result = result.filter((p) => p.rating >= filters.minRating);
+        }
+        if (filters.maxPrice) {
+          result = result.filter((p) => p.price <= filters.maxPrice);
+        }
+        if (filters.flashOnly) {
+          result = result.filter((p) => p.isFlash);
+        }
+
+        // Sắp xếp theo lựa chọn sort
+        if (filters.sortBy === "price-asc") {
+          result.sort((a, b) => a.price - b.price);
+        } else if (filters.sortBy === "price-desc") {
+          result.sort((a, b) => b.price - a.price);
+        } else if (filters.sortBy === "rating") {
+          result.sort((a, b) => b.rating - a.rating);
+        }
+
+        // Đưa sản phẩm thuộc danh mục đã chọn lên đầu
+        if (filters.categoryId) {
+          const matched = result.filter(
+            (p) => p.categoryId === filters.categoryId
+          );
+          const unmatched = result.filter(
+            (p) => p.categoryId !== filters.categoryId
+          );
+          result = [...matched, ...unmatched];
+        }
+        setFilteredProducts(result);
       })
       .finally(() => setLoadingProducts(false));
-  }, [filters]);
+  }, [filters, lang]);
  
   // ─── Cart ───────────────────────────────────────────────
   const cartCount = useMemo(
@@ -223,6 +307,18 @@ export function AppProvider({ children }) {
     localStorage.removeItem(CART_KEY);
   }, []);
  
+  // ─── Notifications ─────────────────────────────────────
+  const [notifications, setNotifications] = useState([]);
+
+  const unreadNotificationsCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
+
+  const markNotificationsAsRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, []);
+
   // ─── Expose ra ngoài ────────────────────────────────────
   const value = {
     filters,
@@ -232,6 +328,9 @@ export function AppProvider({ children }) {
     cartCount,
     cartTotal,
     toast,
+    notifications,
+    unreadNotificationsCount,
+    markNotificationsAsRead,
     search,
     updateFilters,
     filterByCategory,
@@ -245,6 +344,8 @@ export function AppProvider({ children }) {
     clearCart,
     showToast,
     navigate,
+    lang,
+    setLang: changeLang,
   };
  
   return (

@@ -119,3 +119,8 @@ export async function checkoutCart(items = [], note = "") {
     }),
   });
 }
+
+export async function fetchOrders() {
+  const data = await request("/api/orders");
+  return data.orders;
+}

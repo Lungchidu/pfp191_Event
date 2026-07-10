@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { translations } from "../data/i18n";
+import { useApp } from "../context/AppContext";
 import {
   AUTH_SERVER,
   TOKEN_KEY,
@@ -10,15 +11,10 @@ import {
 } from "../config/auth";
 import "../styles/auth.css";
 
-const LANG_OPTIONS = [
-  { code: "vi", label: "VN VI" },
-  { code: "en", label: "GB EN" },
-  { code: "jp", label: "JP JP" },
-];
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
-  const [lang, setLang] = useState("vi");
+  const { lang } = useApp();
   const [isSignUp, setIsSignUp] = useState(
     searchParams.get("mode") !== "login"
   );
@@ -35,7 +31,7 @@ export default function AuthPage() {
     setIsSignUp(searchParams.get("mode") !== "login");
   }, [searchParams]);
 
-  const t = translations[lang];
+  const t = translations[lang] || translations.vi;
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -101,18 +97,6 @@ export default function AuthPage() {
 
   return (
     <div className="auth-page">
-      <div className="auth-lang">
-        {LANG_OPTIONS.map((opt) => (
-          <button
-            key={opt.code}
-            type="button"
-            className={lang === opt.code ? "active" : ""}
-            onClick={() => setLang(opt.code)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
 
       <div className="auth-card">
         <div className="auth-form-panel">
@@ -179,17 +163,10 @@ export default function AuthPage() {
             )}
 
             <button type="submit" className="auth-submit" disabled={loading}>
-              {loading ? "Đang xử lý..." : isSignUp ? t.signUpBtn : t.signInBtn}
+              {loading ? (lang === "en" ? "Processing..." : "Đang xử lý...") : isSignUp ? t.signUpBtn : t.signInBtn}
             </button>
           </form>
 
-          <div className="auth-divider">{t.orContinue}</div>
-
-          <div className="auth-social">
-            <button type="button" title="Google">G</button>
-            <button type="button" title="Apple">⌘</button>
-            <button type="button" title="Facebook">f</button>
-          </div>
 
           <p className="auth-switch-text">
             {isSignUp ? t.haveAccount : t.noAccount}{" "}
@@ -199,7 +176,7 @@ export default function AuthPage() {
           </p>
 
           <Link to="/" className="auth-back-home">
-            ← Về trang chủ
+            ← {lang === "en" ? "Back to home" : "Về trang chủ"}
           </Link>
         </div>
       </div>
