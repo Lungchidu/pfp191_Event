@@ -1,6 +1,6 @@
 import csv
 import os
-from equipment import Equipment
+from equipment import Equipment, AudioEquipment, LightingEquipment, GeneralEquipment
 from rental import Rental
 
 EQUIPMENT_FILE = "equipment.csv"
@@ -18,7 +18,28 @@ def load_equipment():
             reader = csv.DictReader(f)
             for row in reader:
                 try:
-                    eq = Equipment.from_dict(row)
+                    category = ""
+                    if "category" in row:
+                        category = row["category"]
+                    else:
+                        category = "General"
+                        
+                    eq_id = row["equipment_id"]
+                    name = row["name"]
+                    power = row["power_rating"]
+                    rate = row["hourly_rental_rate"]
+                    
+                    status = "Available"
+                    if "current_status" in row:
+                        status = row["current_status"]
+                    
+                    if category == "Audio":
+                        eq = AudioEquipment(eq_id, name, power, rate, status)
+                    elif category == "Lighting":
+                        eq = LightingEquipment(eq_id, name, power, rate, status)
+                    else:
+                        eq = GeneralEquipment(eq_id, name, power, rate, status)
+                        
                     equipment_dict[eq.equipment_id] = eq
                 except Exception as e:
                     # Lấy equipment_id từ row, nếu không có thì để trống
@@ -35,7 +56,7 @@ def load_equipment():
 def save_equipment(equipment_dict):
     try:
         with open(EQUIPMENT_FILE, mode='w', newline='', encoding='utf-8') as f:
-            fieldnames = ["equipment_id", "name", "power_rating", "hourly_rental_rate", "current_status"]
+            fieldnames = ["equipment_id", "name", "power_rating", "hourly_rental_rate", "current_status", "category"]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for eq in equipment_dict.values():

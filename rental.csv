@@ -1,3 +1,4 @@
-rental_id,client_name,start_time,expected_return_time,equipment_ids
-R001,Nguyen Van A,2026-07-16,2026-07-18,EQ003
-R002,Tran Thi B,2026-07-15,2026-07-17,EQ005;EQ009
+rental_id,client_name,start_time,expected_return_time,equipment_ids,status
+R001,Nguyen Van A,2026-07-16,2026-07-18,EQ003,Pending
+R002,Tran Thi B,2026-07-15,2026-07-17,EQ005;EQ009,Pending
+eq11,Dung,2026-10-10,2026-11-11,EQ001,Pending

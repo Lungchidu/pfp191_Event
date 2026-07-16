@@ -1,14 +1,17 @@
 class Equipment:
-    def __init__(self, equipment_id: str, name: str, power_rating: float, hourly_rental_rate: float, current_status: str = "Available"):
+    """
+    1. Tính Đóng gói (Encapsulation):
+    Che giấu các thuộc tính bằng dấu gạch dưới (VD: self._name) 
+    và dùng các hàm @property (getter/setter) để kiểm soát việc đọc/ghi.
+    """
+    def __init__(self, equipment_id, name, power_rating, hourly_rental_rate, current_status="Available"):
         self._equipment_id = equipment_id
         self._name = name
         self._power_rating = float(power_rating)
         self._hourly_rental_rate = float(hourly_rental_rate)
-        
-        if current_status not in ["Available", "Rented"]:
-            raise ValueError("Status must be 'Available' or 'Rented'")
         self._current_status = current_status
 
+    # Getters
     @property
     def equipment_id(self):
         return self._equipment_id
@@ -17,72 +20,79 @@ class Equipment:
     def name(self):
         return self._name
 
-    @name.setter
-    def name(self, value):
-        self._name = value
-
     @property
     def power_rating(self):
         return self._power_rating
 
-    @power_rating.setter
-    def power_rating(self, value):
-        self._power_rating = float(value)
-
     @property
     def hourly_rental_rate(self):
         return self._hourly_rental_rate
-        
-    @hourly_rental_rate.setter
-    def hourly_rental_rate(self, value):
-        self._hourly_rental_rate = float(value)
 
     @property
     def current_status(self):
         return self._current_status
 
+    # Setters
+    @power_rating.setter
+    def power_rating(self, value):
+        self._power_rating = float(value)
+
+    @hourly_rental_rate.setter
+    def hourly_rental_rate(self, value):
+        self._hourly_rental_rate = float(value)
+
     @current_status.setter
     def current_status(self, value):
-        if value not in ["Available", "Rented"]:
-            raise ValueError("Status must be 'Available' or 'Rented'")
         self._current_status = value
+
+    """
+    2. Tính Trừu tượng (Abstraction):
+    Hàm get_type_info() không chứa code thực thi ở lớp cha. Nó bắt buộc
+    bất kỳ lớp con nào cũng phải tự viết lại hàm này, nếu không sẽ bị lỗi.
+    """
+    def get_type_info(self):
+        raise NotImplementedError("Subclasses must implement get_type_info()")
 
     def to_dict(self):
         return {
-            "equipment_id": self.equipment_id,
-            "name": self.name,
-            "power_rating": self.power_rating,
-            "hourly_rental_rate": self.hourly_rental_rate,
-            "current_status": self.current_status
+            "equipment_id": self._equipment_id,
+            "name": self._name,
+            "power_rating": str(self._power_rating),
+            "hourly_rental_rate": str(self._hourly_rental_rate),
+            "current_status": self._current_status,
+            "category": self.get_type_info()
         }
-    
-    @classmethod
-    def from_dict(cls, data):
-        # Lay du lieu tu dictionary (khong dung .get de dễ hiểu)
-        eq_id = data["equipment_id"]
-        
-        if "name" in data:
-            name = data["name"]
-        else:
-            name = ""
-            
-        power = float(data["power_rating"])
-        rate = float(data["hourly_rental_rate"])
-        
-        if "current_status" in data:
-            status = data["current_status"]
-        else:
-            status = "Available"
-            
-        # Tao doi tuong Equipment
-        obj = cls(eq_id, name, power, rate, status)
-        return obj
 
+    """
+    4. Tính Đa hình (Polymorphism):
+    Hàm __str__ dùng hàm get_type_info(). Tùy thuộc vào việc đối tượng là 
+    Audio hay Lighting, hàm này sẽ trả ra kết quả khác nhau.
+    """
     def __str__(self):
-        # Cong chuoi co ban de de doc hon f-string
-        text = "ID: " + self.equipment_id + " | "
-        text = text + "Name: " + self.name + " | "
-        text = text + "Power: " + str(self.power_rating) + "W | "
-        text = text + "Rate: $" + str(self.hourly_rental_rate) + "/hr | "
-        text = text + "Status: " + self.current_status
-        return text
+        info = "[" + self.get_type_info() + "] "
+        info = info + "ID: " + self._equipment_id + " | "
+        info = info + "Name: " + self._name + " | "
+        info = info + "Power: " + str(self._power_rating) + "W | "
+        info = info + "Rate: $" + str(self._hourly_rental_rate) + "/h | "
+        info = info + "Status: " + self._current_status
+        return info
+
+
+"""
+3. Tính Kế thừa (Inheritance):
+Các lớp AudioEquipment, LightingEquipment, GeneralEquipment kế thừa 
+toàn bộ thuộc tính và phương thức từ lớp cha Equipment.
+"""
+class AudioEquipment(Equipment):
+    def get_type_info(self):
+        return "Audio"
+
+
+class LightingEquipment(Equipment):
+    def get_type_info(self):
+        return "Lighting"
+
+
+class GeneralEquipment(Equipment):
+    def get_type_info(self):
+        return "General"

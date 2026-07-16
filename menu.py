@@ -1,5 +1,5 @@
 import sys
-from equipment import Equipment
+from equipment import Equipment, AudioEquipment, LightingEquipment, GeneralEquipment
 from rental import Rental
 from auth import Auth
 import data_manager
@@ -29,7 +29,20 @@ class EventRentalApp:
         try:
             power = float(input("Enter Power Rating (W): "))
             rate = float(input("Enter Hourly Rental Rate ($): "))
-            eq = Equipment(eq_id, name, power, rate)
+            
+            print("Select Equipment Category:")
+            print("1. Audio")
+            print("2. Lighting")
+            print("3. General (Other)")
+            cat_choice = input("Enter choice: ").strip()
+            
+            if cat_choice == '1':
+                eq = AudioEquipment(eq_id, name, power, rate)
+            elif cat_choice == '2':
+                eq = LightingEquipment(eq_id, name, power, rate)
+            else:
+                eq = GeneralEquipment(eq_id, name, power, rate)
+                
             self.equipment_dict[eq_id] = eq
             print("Equipment added successfully!")
         except ValueError as e:
@@ -38,12 +51,18 @@ class EventRentalApp:
 
     def update_equipment(self):
         print("\n--- Update Equipment ---")
-        eq_id = input("Enter Equipment ID to update: ").strip()
-        if eq_id not in self.equipment_dict:
+        # Báo lỗi nếu chưa có dữ liệu (file không tồn tại hoặc rỗng)
+        if len(self.equipment_dict) == 0:
+            print("Error: No equipment data available (file might be missing or empty).")
+            return
+            
+        query = input("Enter Equipment ID or Name to update: ").strip()
+        
+        eq = self.find_equipment(query)
+        if eq == None:
             print("Equipment not found.")
             return
         
-        eq = self.equipment_dict[eq_id]
         # Hiển thị thông tin hiện tại
         print("Current details: " + str(eq))
         
@@ -62,6 +81,10 @@ class EventRentalApp:
 
     def search_equipment(self):
         print("\n--- Search Equipment ---")
+        if len(self.equipment_dict) == 0:
+            print("Error: No equipment data available (file might be missing or empty).")
+            return
+            
         query = input("Enter Equipment ID or Name to search: ").strip().lower()
         found = False
         for eq in self.equipment_dict.values():
@@ -71,11 +94,48 @@ class EventRentalApp:
         if not found:
             print("No matching equipment found.")
 
+    def find_equipment(self, query):
+        query = query.strip().lower()
+        matches = []
+        
+        # Tìm tất cả các kết quả phù hợp (theo ID hoặc Tên)
+        for eq in self.equipment_dict.values():
+            if query in eq.equipment_id.lower() or query in eq.name.lower():
+                matches.append(eq)
+                
+        if len(matches) == 0:
+            return None
+        elif len(matches) == 1:
+            return matches[0]
+        else:
+            print("\nMultiple equipments found:")
+            for i in range(len(matches)):
+                print(str(i + 1) + ". " + str(matches[i]))
+            
+            # Yêu cầu người dùng chọn nếu có nhiều hơn 1 kết quả
+            while True:
+                choice_str = input("Select an equipment by number (or 0 to cancel): ").strip()
+                if choice_str == '0':
+                    return None
+                try:
+                    choice_idx = int(choice_str)
+                    if choice_idx >= 1 and choice_idx <= len(matches):
+                        return matches[choice_idx - 1]
+                    else:
+                        print("Invalid number. Please try again.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
     def filter_equipment(self):
         print("\n--- Filter Equipment ---")
+        if len(self.equipment_dict) == 0:
+            print("Error: No equipment data available (file might be missing or empty).")
+            return
+            
         print("1. By Status (Available/Rented)")
         print("2. By Hourly Rate Range")
         print("3. By Power Rating Range")
+        print("4. By Name")
         choice = input("Enter choice: ").strip()
         
         found = False
@@ -109,6 +169,12 @@ class EventRentalApp:
             except ValueError:
                 print("Invalid input.")
                 return
+        elif choice == '4':
+            query = input("Enter Name to filter: ").strip().lower()
+            for eq in self.equipment_dict.values():
+                if query in eq.name.lower():
+                    print(eq)
+                    found = True
         else:
             print("Invalid choice.")
             return
@@ -137,23 +203,42 @@ class EventRentalApp:
                     for eid in self.rental_cart:
                         print(self.equipment_dict[eid])
             elif choice == '2':
-                eid = input("Enter Equipment ID to add: ").strip()
-                if eid not in self.equipment_dict:
+                query = input("Enter Equipment ID or Name to add: ").strip()
+                eq = self.find_equipment(query)
+                if eq == None:
                     print("Equipment not found.")
-                elif self.equipment_dict[eid].current_status != "Available":
+                elif eq.current_status != "Available":
                     print("Equipment is not available.")
-                elif eid in self.rental_cart:
-                    print("Equipment already in cart.")
                 else:
-                    self.rental_cart.append(eid)
-                    print("Added to cart.")
+                    eid = eq.equipment_id
+                    # Kiểm tra xem đã có trong giỏ chưa bằng vòng lặp
+                    in_cart = False
+                    for item in self.rental_cart:
+                        if item == eid:
+                            in_cart = True
+                            
+                    if in_cart:
+                        print("Equipment already in cart.")
+                    else:
+                        self.rental_cart.append(eid)
+                        print("Added to cart.")
             elif choice == '3':
-                eid = input("Enter Equipment ID to remove: ").strip()
-                if eid in self.rental_cart:
-                    self.rental_cart.remove(eid)
-                    print("Removed from cart.")
+                query = input("Enter Equipment ID or Name to remove: ").strip()
+                eq = self.find_equipment(query)
+                if eq == None:
+                    print("Equipment not found.")
                 else:
-                    print("Equipment not in cart.")
+                    eid = eq.equipment_id
+                    in_cart = False
+                    for item in self.rental_cart:
+                        if item == eid:
+                            in_cart = True
+                            
+                    if in_cart:
+                        self.rental_cart.remove(eid)
+                        print("Removed from cart.")
+                    else:
+                        print("Equipment not in cart.")
             elif choice == '4':
                 # Xóa giỏ hàng
                 self.rental_cart = []
@@ -211,6 +296,10 @@ class EventRentalApp:
             print("Failed to create order: " + str(e))
 
     def order_management_menu(self):
+        if len(self.rentals) == 0:
+            print("\nError: No order data available (file might be missing or empty).")
+            return
+            
         while True:
             print("\n--- Order Management ---")
             print("1. Track Order")
@@ -231,66 +320,121 @@ class EventRentalApp:
                 print("Invalid choice.")
 
     def track_order(self):
-        rid = input("Enter Order ID to track: ").strip()
+        query = input("Enter Order ID or Client Name to track: ").strip().lower()
+        found = False
         for r in self.rentals:
-            if r.rental_id == rid:
+            if query == r.rental_id.lower() or query in r.client_name.lower():
                 print("\nOrder Details:")
                 print(r)
                 fees = r.calculate_fees(self.equipment_dict)
-                # Hiển thị tổng phí
                 print("Total Fees: $" + str(round(fees, 2)))
                 print("Equipments:")
                 for eid in r.equipment_ids:
                     if eid in self.equipment_dict:
                         print(" - " + str(self.equipment_dict[eid]))
-                return
-        print("Order not found.")
+                found = True
+        if not found:
+            print("Order not found.")
 
     def payment(self):
-        rid = input("Enter Order ID for payment: ").strip()
+        query = input("Enter Order ID or Client Name for payment: ").strip().lower()
+        matches = []
         for r in self.rentals:
-            if r.rental_id == rid:
-                if r.status == "Paid":
-                    print("Order is already paid.")
-                elif r.status == "Cancelled":
-                    print("Cannot pay for a cancelled order.")
-                elif r.status == "Completed":
-                    print("Order is already completed.")
-                else:
-                    fees = r.calculate_fees(self.equipment_dict)
-                    # Hiển thị số tiền cần thanh toán
-                    print("Total Amount Due: $" + str(round(fees, 2)))
-                    confirm = input("Confirm payment? (Y/N): ").strip().upper()
-                    if confirm == 'Y':
-                        r.status = "Paid"
-                        print("Payment successful. Order status updated to Paid.")
-                    else:
-                        print("Payment cancelled.")
-                return
-        print("Order not found.")
+            if query == r.rental_id.lower() or query in r.client_name.lower():
+                matches.append(r)
+                
+        if len(matches) == 0:
+            print("Order not found.")
+            return
+        elif len(matches) > 1:
+            print("Found multiple orders. Please try again with the exact Order ID:")
+            for m in matches:
+                print(m)
+            return
+            
+        r = matches[0]
+        if r.status == "Paid":
+            print("Order is already paid.")
+        elif r.status == "Cancelled":
+            print("Cannot pay for a cancelled order.")
+        elif r.status == "Completed":
+            print("Order is already completed.")
+        else:
+            fees = r.calculate_fees(self.equipment_dict)
+            print("Total Amount Due: $" + str(round(fees, 2)))
+            confirm = input("Confirm payment? (Y/N): ").strip().upper()
+            if confirm == 'Y':
+                r.status = "Paid"
+                print("Payment successful. Order status updated to Paid.")
+            else:
+                print("Payment cancelled.")
 
     def cancel_order(self):
-        rid = input("Enter Order ID to cancel: ").strip()
+        query = input("Enter Order ID or Client Name to cancel: ").strip().lower()
+        matches = []
         for r in self.rentals:
-            if r.rental_id == rid:
-                # Kiểm tra trạng thái đơn hàng
-                if r.status == "Cancelled" or r.status == "Completed":
-                    print("Order cannot be cancelled because its status is " + r.status + ".")
-                else:
-                    confirm = input("Are you sure you want to cancel order " + rid + "? (Y/N): ").strip().upper()
-                    if confirm == 'Y':
-                        r.status = "Cancelled"
-                        for eid in r.equipment_ids:
-                            if eid in self.equipment_dict:
-                                self.equipment_dict[eid].current_status = "Available"
-                        print("Order cancelled. Equipments are now available.")
-                    else:
-                        print("Cancellation aborted.")
-                return
-        print("Order not found.")
+            if query == r.rental_id.lower() or query in r.client_name.lower():
+                matches.append(r)
+                
+        if len(matches) == 0:
+            print("Order not found.")
+            return
+        elif len(matches) > 1:
+            print("Found multiple orders. Please try again with the exact Order ID:")
+            for m in matches:
+                print(m)
+            return
+            
+        r = matches[0]
+        if r.status == "Cancelled" or r.status == "Completed":
+            print("Order cannot be cancelled because its status is " + r.status + ".")
+        else:
+            confirm = input("Are you sure you want to cancel order " + r.rental_id + "? (Y/N): ").strip().upper()
+            if confirm == 'Y':
+                r.status = "Cancelled"
+                for eid in r.equipment_ids:
+                    if eid in self.equipment_dict:
+                        self.equipment_dict[eid].current_status = "Available"
+                print("Order cancelled. Equipments are now available.")
+            else:
+                print("Cancellation aborted.")
+
+    def book_equipment(self):
+        print("\n--- Book Equipment ---")
+        if len(self.equipment_dict) == 0:
+            print("Error: No equipment data available (file might be missing or empty).")
+            return
+            
+        query = input("Enter Equipment ID or Name to book: ").strip()
+        eq = self.find_equipment(query)
+        
+        if eq == None:
+            print("Equipment not found.")
+            return
+            
+        if eq.current_status != "Available":
+            print("Equipment is not available.")
+            return
+            
+        eid = eq.equipment_id
+        in_cart = False
+        for item in self.rental_cart:
+            if item == eid:
+                in_cart = True
+                
+        if in_cart:
+            print("Equipment already in cart.")
+        else:
+            self.rental_cart.append(eid)
+            print("Successfully added '" + eq.name + "' to your cart!")
+            print("Go to 'Rental Cart (Checkout)' to complete your order.")
 
     def data_analysis(self):
         print("\n--- Data Analysis ---")
+        if len(self.equipment_dict) == 0 and len(self.rentals) == 0:
+            print("Error: No data available to analyze (files might be missing or empty).")
+            return
+            
         print("1. Sort Equipment by Rental Rate")
         print("2. Sort Equipment by Power Rating")
         print("3. Sort Orders by Client Name")
@@ -345,33 +489,33 @@ class EventRentalApp:
             # Hiển thị thông tin đăng nhập
             print("Logged in as: " + self.auth.get_current_fullname() + " (" + role_label + ")")
             print("=" * 40)
-            print("1. Add Equipment")
-            print("2. Update Equipment")
-            print("3. Search Equipment")
-            print("4. Filter Equipment")
-            print("5. Rental Cart (Checkout)")
-            print("6. Order Management (Track, Pay, Cancel)")
-            print("7. Data Analysis (Sorting)")
-            print("8. Logout")
-            print("9. Exit and Save")
+            print("1. Search Equipment")
+            print("2. Filter Equipment")
+            print("3. Book Equipment (Add to Cart)")
+            print("4. Rental Cart (Checkout)")
+            print("5. Order Management (Track, Pay, Cancel)")
+            print("6. Data Analysis (Sorting)")
+            print("7. Logout")
+            print("8. Exit and Save")
+            if self.auth.is_admin():
+                print("9. Add Equipment (Admin)")
+                print("10. Update Equipment (Admin)")
             
             choice = input("\nEnter your choice: ").strip()
             
             if choice == '1':
-                self.add_equipment()
-            elif choice == '2':
-                self.update_equipment()
-            elif choice == '3':
                 self.search_equipment()
-            elif choice == '4':
+            elif choice == '2':
                 self.filter_equipment()
-            elif choice == '5':
+            elif choice == '3':
+                self.book_equipment()
+            elif choice == '4':
                 self.rental_cart_menu()
-            elif choice == '6':
+            elif choice == '5':
                 self.order_management_menu()
-            elif choice == '7':
+            elif choice == '6':
                 self.data_analysis()
-            elif choice == '8':
+            elif choice == '7':
                 self.auth.logout()
                 self.rental_cart = []
                 print("Logged out successfully.")
@@ -380,11 +524,21 @@ class EventRentalApp:
                     data_manager.save_rentals(self.rentals)
                     print("Data saved. Exiting application.")
                     sys.exit(0)
-            elif choice == '9':
+            elif choice == '8':
                 data_manager.save_equipment(self.equipment_dict)
                 data_manager.save_rentals(self.rentals)
                 print("Data saved. Exiting application.")
                 sys.exit(0)
+            elif choice == '9':
+                if self.auth.is_admin():
+                    self.add_equipment()
+                else:
+                    print("Invalid choice. Please try again.")
+            elif choice == '10':
+                if self.auth.is_admin():
+                    self.update_equipment()
+                else:
+                    print("Invalid choice. Please try again.")
             else:
                 print("Invalid choice. Please try again.")
 
