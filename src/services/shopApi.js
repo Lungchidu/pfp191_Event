@@ -9,6 +9,10 @@ function buildHeaders(extra = {}) {
   if (username) {
     headers["X-Username"] = username;
   }
+  const token = localStorage.getItem("token");
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   return headers;
 }
 
@@ -27,6 +31,13 @@ async function request(url, options = {}) {
       err.message ||
         "Không kết nối được server Python. Chạy: cd LoginandRegister/myapp && python app.py"
     );
+  }
+
+  if (data.maintenance) {
+    window.dispatchEvent(
+      new CustomEvent("maintenance_mode", { detail: data.message })
+    );
+    throw new Error(data.message || "Hệ thống đang bảo trì");
   }
 
   if (!res.ok || data.success === false) {
@@ -106,7 +117,7 @@ export async function removeCartItemApi(productId) {
   return data.items;
 }
 
-export async function checkoutCart(items = [], note = "") {
+export async function checkoutCart(items = [], note = "", profileData = {}) {
   return request("/api/checkout", {
     method: "POST",
     body: JSON.stringify({
@@ -116,6 +127,7 @@ export async function checkoutCart(items = [], note = "") {
         days: item.days,
       })),
       note,
+      ...profileData
     }),
   });
 }
@@ -123,4 +135,17 @@ export async function checkoutCart(items = [], note = "") {
 export async function fetchOrders() {
   const data = await request("/api/orders");
   return data.orders;
+}
+
+export async function fetchProfile() {
+  const data = await request("/api/profile");
+  return data.profile;
+}
+
+export async function updateProfile(profileData) {
+  const data = await request("/api/profile", {
+    method: "POST",
+    body: JSON.stringify(profileData),
+  });
+  return data;
 }

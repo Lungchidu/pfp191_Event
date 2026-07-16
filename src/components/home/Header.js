@@ -54,6 +54,14 @@ export default function Header({ t, lang, onLangChange }) {
                 <>
                   <span className="top-bar__user">{t.hello}, {username}</span>
                   <span className="top-bar__divider">|</span>
+                  <Link to="/account?tab=profile" className="top-bar__link-btn" style={{ textDecoration: "none", color: "inherit" }}>
+                    {t.viewAccount}
+                  </Link>
+                  <span className="top-bar__divider">|</span>
+                  <Link to="/account?tab=history" className="top-bar__link-btn" style={{ textDecoration: "none", color: "inherit" }}>
+                    {t.viewHistory}
+                  </Link>
+                  <span className="top-bar__divider">|</span>
                   <button type="button" className="top-bar__link-btn" onClick={handleLogout}>
                     {t.logout}
                   </button>

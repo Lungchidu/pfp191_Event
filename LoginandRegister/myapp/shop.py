@@ -14,15 +14,17 @@ def parse_filters_from_request(args):
     }
 
 
-def get_all_products(db):
-    conn = db.connect()
+def get_all_products(product_db):
+    """Đọc tất cả sản phẩm từ products.db (Read-Only cho khách hàng)."""
+    conn = product_db.connect_readonly()
     rows = conn.execute("SELECT * FROM products ORDER BY id").fetchall()
     conn.close()
     return [row_to_product(row) for row in rows]
 
 
-def get_product_by_id(db, product_id):
-    conn = db.connect()
+def get_product_by_id(product_db, product_id):
+    """Đọc 1 sản phẩm theo ID từ products.db (Read-Only)."""
+    conn = product_db.connect_readonly()
     row = conn.execute(
         "SELECT * FROM products WHERE id = ?", (product_id,)
     ).fetchone()
@@ -32,12 +34,12 @@ def get_product_by_id(db, product_id):
     return row_to_product(row)
 
 
-def get_related_products(db, product_id, limit=4):
-    product = get_product_by_id(db, product_id)
+def get_related_products(product_db, product_id, limit=4):
+    product = get_product_by_id(product_db, product_id)
     if product is None:
         return []
 
-    all_products = get_all_products(db)
+    all_products = get_all_products(product_db)
     related = []
     for p in all_products:
         if p["id"] == product_id:
@@ -49,13 +51,13 @@ def get_related_products(db, product_id, limit=4):
     return related
 
 
-def get_flash_products(db):
-    all_products = get_all_products(db)
+def get_flash_products(product_db):
+    all_products = get_all_products(product_db)
     return [p for p in all_products if p["isFlash"]]
 
 
-def get_locations(db):
-    all_products = get_all_products(db)
+def get_locations(product_db):
+    all_products = get_all_products(product_db)
     locations = []
     for p in all_products:
         if p["location"] not in locations:
@@ -63,39 +65,36 @@ def get_locations(db):
     return locations
 
 
-def get_all_categories(db):
-    conn = db.connect()
+def get_all_categories(product_db):
+    """Đọc tất cả danh mục từ products.db (Read-Only)."""
+    conn = product_db.connect_readonly()
     rows = conn.execute("SELECT * FROM categories ORDER BY id").fetchall()
     conn.close()
     return [row_to_category(row) for row in rows]
 
 
-def get_cart_items(db, username):
+def get_cart_items(db, product_db, username):
+    """Đọc giỏ hàng từ event_rental.db, tra cứu thông tin sản phẩm từ products.db."""
     conn = db.connect()
     rows = conn.execute(
-        """
-        SELECT c.product_id, c.quantity, c.days,
-               p.name, p.price, p.image, p.location
-        FROM cart_items c
-        JOIN products p ON p.id = c.product_id
-        WHERE c.username = ?
-        ORDER BY c.product_id
-        """,
+        "SELECT product_id, quantity, days FROM cart_items WHERE username = ? ORDER BY product_id",
         (username,),
     ).fetchall()
     conn.close()
 
     items = []
     for row in rows:
-        items.append({
-            "id": row["product_id"],
-            "name": row["name"],
-            "price": row["price"],
-            "image": row["image"],
-            "location": row["location"],
-            "quantity": row["quantity"],
-            "days": row["days"],
-        })
+        product = get_product_by_id(product_db, row["product_id"])
+        if product:
+            items.append({
+                "id": row["product_id"],
+                "name": product["name"],
+                "price": product["price"],
+                "image": product["image"],
+                "location": product["location"],
+                "quantity": row["quantity"],
+                "days": row["days"],
+            })
     return items
 
 
@@ -106,16 +105,13 @@ def calc_cart_total(items):
     return total
 
 
-def add_to_cart(db, username, product_id, quantity=1, days=1):
-    conn = db.connect()
-    product = conn.execute(
-        "SELECT id FROM products WHERE id = ?", (product_id,)
-    ).fetchone()
-
+def add_to_cart(db, product_db, username, product_id, quantity=1, days=1):
+    """Thêm vào giỏ hàng: kiểm tra sản phẩm tồn tại trong products.db trước."""
+    product = get_product_by_id(product_db, product_id)
     if product is None:
-        conn.close()
         return False, "Không tìm thấy sản phẩm!"
 
+    conn = db.connect()
     existing = conn.execute(
         """
         SELECT quantity, days FROM cart_items
@@ -196,11 +192,11 @@ def remove_from_cart(db, username, product_id):
     return True, "Đã xóa khỏi giỏ thuê"
 
 
-def _items_from_client(db, client_items):
-    """Lấy thông tin sản phẩm.
+def _items_from_client(product_db, client_items):
+    """Lấy thông tin sản phẩm từ products.db.
     - Nếu tìm thấy trong DB: dùng giá/tên từ DB (chính xác).
     - Nếu không có trong DB (sản phẩm từ mockData): dùng dữ liệu client gửi lên
-      và đặt product_id = None để tránh vi phạm FK constraint.
+      và đặt product_id = None để tránh vi phạm.
     """
     items = []
     for row in client_items:
@@ -209,7 +205,7 @@ def _items_from_client(db, client_items):
         quantity = max(1, int(row.get("quantity", 1)))
         days = max(1, int(row.get("days", 1)))
 
-        product = get_product_by_id(db, product_id) if product_id else None
+        product = get_product_by_id(product_db, product_id) if product_id else None
 
         if product:
             items.append({
@@ -241,26 +237,25 @@ def _items_from_client(db, client_items):
     return items, None
 
 
-def checkout_cart(db, username, client_items=None, note=""):
-    """Đặt thuê: lưu đơn hàng và xóa giỏ.
+def checkout_cart(db, product_db, username, client_items=None, note=""):
+    """Đặt thuê: lưu đơn hàng vào event_rental.db, cập nhật stock trong products.db, xóa giỏ.
 
     client_items: giỏ từ React (localStorage) — ưu tiên dùng khi có.
     """
     if client_items:
-        items, err = _items_from_client(db, client_items)
+        items, err = _items_from_client(product_db, client_items)
         if err:
             return False, err, 0
     else:
-        items = get_cart_items(db, username)
+        items = get_cart_items(db, product_db, username)
 
     if not items:
         return False, "Giỏ thuê đang trống!", 0
 
     total = sum(i["price"] * i["quantity"] * i["days"] for i in items)
     conn = db.connect()
+    product_conn = product_db.connect()  # Read-Write để cập nhật stock
     try:
-        conn.execute("PRAGMA foreign_keys = OFF")
-
         cur = conn.execute(
             "INSERT INTO orders (username, total, note) VALUES (?, ?, ?)",
             (username, total, note or ""),
@@ -284,61 +279,71 @@ def checkout_cart(db, username, client_items=None, note=""):
                     item["days"],
                 ),
             )
-            
-            # Cập nhật số lượng
-            conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (item["quantity"], pid))
-            # Nếu số lượng hết, xóa món hàng đó
-            conn.execute("DELETE FROM products WHERE id = ? AND stock <= 0", (pid,))
+
+            # Cập nhật số lượng trong products.db
+            if pid:
+                product_conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (item["quantity"], pid))
+                # Nếu số lượng hết, xóa món hàng đó
+                product_conn.execute("DELETE FROM products WHERE id = ? AND stock <= 0", (pid,))
 
         conn.execute("DELETE FROM cart_items WHERE username = ?", (username,))
         conn.commit()
+        product_conn.commit()
     except Exception as e:
         conn.rollback()
+        product_conn.rollback()
         conn.close()
+        product_conn.close()
         raise e
     finally:
         try:
-            conn.execute("PRAGMA foreign_keys = ON")
             conn.close()
+            product_conn.close()
         except Exception:
             pass
 
     return True, f"Đặt thuê thành công! Tổng: {total:,}đ", total
 
 
-def get_user_orders(db, username):
+def get_user_orders(db, product_db, username):
     conn = db.connect()
     try:
         order_rows = conn.execute(
             "SELECT * FROM orders WHERE username = ? ORDER BY id DESC",
             (username,)
         ).fetchall()
-        
+
+        # Lấy thông tin sản phẩm từ products.db cho hình ảnh
+        product_conn = product_db.connect_readonly()
+
         orders = []
         for row in order_rows:
             order_id = row["id"]
             item_rows = conn.execute(
-                """
-                SELECT oi.*, p.image, p.location
-                FROM order_items oi
-                LEFT JOIN products p ON p.id = oi.product_id
-                WHERE oi.order_id = ?
-                """,
+                "SELECT * FROM order_items WHERE order_id = ?",
                 (order_id,)
             ).fetchall()
-            
+
             items = []
             for item in item_rows:
+                # Lấy thông tin ảnh/location từ products.db
+                product_row = None
+                if item["product_id"]:
+                    product_row = product_conn.execute(
+                        "SELECT image, location FROM products WHERE id = ?",
+                        (item["product_id"],)
+                    ).fetchone()
+
                 items.append({
                     "id": item["product_id"],
                     "product_name": item["product_name"],
                     "price": item["price"],
                     "quantity": item["quantity"],
                     "days": item["days"],
-                    "image": item["image"] or "",
-                    "location": item["location"] or ""
+                    "image": product_row["image"] if product_row else "",
+                    "location": product_row["location"] if product_row else ""
                 })
-            
+
             orders.append({
                 "id": f"EVR-2026-{order_id:03d}",
                 "db_id": order_id,
@@ -348,6 +353,8 @@ def get_user_orders(db, username):
                 "created_at": row["created_at"],
                 "items": items
             })
+
+        product_conn.close()
         return orders
     finally:
         conn.close()

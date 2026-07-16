@@ -13,7 +13,8 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from database import Database, CustomerDatabase
+from database import Database, CustomerDatabase, ProductDatabase
+from models import User, Customer, Admin
 from seed_data import seed_all
 from ui_data import get_ui_data
 from shipper_routes import shipper_bp
@@ -46,10 +47,21 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 from flask import send_from_directory
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import NotFound
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    try:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    except NotFound:
+        return jsonify({"success": False, "message": "Hình ảnh không tồn tại!"}), 404
 
 def get_shop_url():
     """URL React shop — ưu tiên ?shop_url= từ query (khi React chạy port 3002...)."""
@@ -58,12 +70,41 @@ def get_shop_url():
 CORS(app, origins="*", supports_credentials=True)
 app.register_blueprint(shipper_bp)
 
+product_db = ProductDatabase()
 db = Database()
-db.init_tables()
-
 customer_db = CustomerDatabase()
+
+# Auto-run migrations
+product_db.init_tables()
+db.init_tables()
 customer_db.init_tables()
-seed_all(db, customer_db, force=True)
+
+import sqlite3
+
+def get_role_from_request():
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            return payload.get("role", "customer")
+        except Exception:
+            pass
+    # Đối với yêu cầu kiểm thử hoặc gọi từ frontend chưa có JWT nhưng có lưu role trong header
+    # Ở đây chúng ta chỉ dùng JWT để bảo mật chắc chắn role admin
+    return "customer"
+
+@app.errorhandler(sqlite3.OperationalError)
+def handle_db_error(e):
+    role = get_role_from_request()
+    if role == "admin":
+        return jsonify({"success": False, "message": f"[ADMIN VIEW] Lỗi Database: {str(e)}"}), 500
+    
+    return jsonify({
+        "success": False, 
+        "maintenance": True, 
+        "message": "Hệ thống đang bảo trì, vui lòng thử lại sau ít phút"
+    }), 500
 
 
 def get_username_from_request():
@@ -111,10 +152,13 @@ def register():
         conn.close()
         return jsonify({"success": False, "message": "Tài khoản đã tồn tại"})
 
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    # OOP: Khởi tạo đối tượng Customer và sử dụng tính đóng gói
+    new_user = Customer(username=username)
+    new_user.set_password(password)
+    
     conn.execute(
-        "INSERT INTO users (username, password) VALUES (?, ?)",
-        (username, hashed),
+        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+        (new_user.username, new_user._password, new_user.role),
     )
     conn.commit()
     conn.close()
@@ -129,27 +173,35 @@ def login():
 
     conn = customer_db.connect()
     row = conn.execute(
-        "SELECT password, role FROM users WHERE username=?", (username,)
+        "SELECT * FROM users WHERE username=?", (username,)
     ).fetchone()
     conn.close()
 
-    if not row or not bcrypt.checkpw(password.encode(), row["password"].encode()):
+    # OOP: Đa hình - tự động trả về Customer hoặc Admin tùy theo db
+    user = User.from_db_row(dict(row) if row else None)
+
+    # OOP: Trừu tượng - login ẩn chi tiết hash/verify bcrypt
+    if not user or not user.login(password):
         return jsonify({
             "success": False,
             "message": "Nhập sai tên tài khoản hoặc mật khẩu",
         })
 
     token = jwt.encode({
-        "username": username,
-        "role": row["role"],
+        "username": user.username,
+        "role": user.role,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7),
     }, SECRET_KEY, algorithm="HS256")
 
+    # OOP: Đa hình - Admin.to_dict() trả về nhiều data hơn Customer.to_dict()
+    user_data = user.to_dict()
+
     return jsonify({
         "success": True,
-        "message": f"Chào mừng {username}!",
-        "username": username,
-        "role": row["role"],
+        "message": f"Chào mừng {user.username}!",
+        "username": user.username,
+        "role": user.role,
+        "user_data": user_data,
         "token": token,
     })
 
@@ -167,6 +219,65 @@ def verify():
         return jsonify({"success": False, "message": "Token không hợp lệ!"})
 
 
+@app.route("/api/profile", methods=["GET"])
+def api_get_profile():
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"success": False, "message": "Chưa đăng nhập!"}), 401
+    
+    conn = customer_db.connect()
+    row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    
+    if not row:
+        return jsonify({"success": False, "message": "Không tìm thấy người dùng!"}), 404
+        
+    user = User.from_db_row(dict(row))
+    return jsonify({"success": True, "profile": user.to_dict()})
+
+
+@app.route("/api/profile", methods=["POST"])
+def api_update_profile():
+    username = get_username_from_request()
+    if not username:
+        return jsonify({"success": False, "message": "Chưa đăng nhập!"}), 401
+        
+    data = request.json or {}
+    fullName = data.get("fullName", "").strip()
+    phone = data.get("phone", "").strip()
+    birthYear = data.get("birthYear")
+    address = data.get("address", "").strip()
+    
+    if birthYear is not None:
+        try:
+            birthYear = int(birthYear)
+        except ValueError:
+            birthYear = 0
+    else:
+        birthYear = 0
+
+    conn = customer_db.connect()
+    try:
+        conn.execute(
+            """
+            UPDATE users 
+            SET full_name = ?, phone = ?, birth_year = ?, address = ?
+            WHERE username = ?
+            """,
+            (fullName, phone, birthYear, address, username)
+        )
+        conn.commit()
+        
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        user = User.from_db_row(dict(row))
+        return jsonify({"success": True, "message": "Cập nhật thông tin thành công!", "profile": user.to_dict()})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"Lỗi: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/health", methods=["GET"])
 def api_health():
     return jsonify({"success": True, "service": "EventRent API"})
@@ -179,7 +290,7 @@ def api_ui():
 
 @app.route("/api/products", methods=["GET"])
 def api_products():
-    products = get_all_products(db)
+    products = get_all_products(product_db)
     f = parse_filters_from_request(request.args)
     filtered = filter_products(
         products,
@@ -196,28 +307,28 @@ def api_products():
 
 @app.route("/api/products/flash", methods=["GET"])
 def api_flash_products():
-    products = get_flash_products(db)
+    products = get_flash_products(product_db)
     return jsonify({"success": True, "products": products})
 
 
 @app.route("/api/products/<int:product_id>", methods=["GET"])
 def api_product_detail(product_id):
-    product = get_product_by_id(db, product_id)
+    product = get_product_by_id(product_db, product_id)
     if product is None:
         return jsonify({"success": False, "message": "Không tìm thấy sản phẩm!"}), 404
-    related = get_related_products(db, product_id)
+    related = get_related_products(product_db, product_id)
     return jsonify({"success": True, "product": product, "related": related})
 
 
 @app.route("/api/categories", methods=["GET"])
 def api_categories():
-    categories = get_all_categories(db)
+    categories = get_all_categories(product_db)
     return jsonify({"success": True, "categories": categories})
 
 
 @app.route("/api/locations", methods=["GET"])
 def api_locations():
-    locations = get_locations(db)
+    locations = get_locations(product_db)
     return jsonify({"success": True, "locations": locations})
 
 
@@ -226,7 +337,7 @@ def api_get_cart():
     username = get_username_from_request()
     if not username:
         return jsonify({"success": False, "message": "Chưa đăng nhập!"}), 401
-    items = get_cart_items(db, username)
+    items = get_cart_items(db, product_db, username)
     return jsonify({"success": True, "items": items})
 
 
@@ -241,11 +352,11 @@ def api_add_cart():
     quantity = int(data.get("quantity", 1))
     days = int(data.get("days", 1))
 
-    ok, message = add_to_cart(db, username, product_id, quantity, days)
+    ok, message = add_to_cart(db, product_db, username, product_id, quantity, days)
     if not ok:
         return jsonify({"success": False, "message": message}), 400
 
-    items = get_cart_items(db, username)
+    items = get_cart_items(db, product_db, username)
     return jsonify({"success": True, "message": message, "items": items})
 
 
@@ -266,7 +377,7 @@ def api_update_cart(product_id):
     if not ok:
         return jsonify({"success": False, "message": message}), 400
 
-    items = get_cart_items(db, username)
+    items = get_cart_items(db, product_db, username)
     return jsonify({"success": True, "message": message, "items": items})
 
 
@@ -277,7 +388,7 @@ def api_remove_cart(product_id):
         return jsonify({"success": False, "message": "Chưa đăng nhập!"}), 401
 
     ok, message = remove_from_cart(db, username, product_id)
-    items = get_cart_items(db, username)
+    items = get_cart_items(db, product_db, username)
     return jsonify({"success": True, "message": message, "items": items})
 
 
@@ -291,8 +402,41 @@ def api_checkout():
     client_items = data.get("items")
     note = data.get("note", "")
 
+    # Sync checkout information back to user profile
+    fullName = data.get("fullName")
+    phone = data.get("phone")
+    birthYear = data.get("birthYear")
+    address = data.get("address")
+    
+    if fullName is not None or phone is not None or birthYear is not None or address is not None:
+        conn = customer_db.connect()
+        try:
+            row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+            if row:
+                updated_fullName = fullName if fullName is not None else row["full_name"]
+                updated_phone = phone if phone is not None else row["phone"]
+                updated_address = address if address is not None else row["address"]
+                try:
+                    updated_birthYear = int(birthYear) if birthYear is not None else row["birth_year"]
+                except ValueError:
+                    updated_birthYear = row["birth_year"]
+                
+                conn.execute(
+                    """
+                    UPDATE users 
+                    SET full_name = ?, phone = ?, birth_year = ?, address = ?
+                    WHERE username = ?
+                    """,
+                    (updated_fullName, updated_phone, updated_birthYear, updated_address, username)
+                )
+                conn.commit()
+        except Exception as e:
+            print("Failed to sync checkout profile:", e)
+        finally:
+            conn.close()
+
     ok, message, total = checkout_cart(
-        db, username, client_items=client_items, note=note
+        db, product_db, username, client_items=client_items, note=note
     )
     if not ok:
         return jsonify({"success": False, "message": message}), 400
@@ -305,25 +449,29 @@ def api_get_orders():
     username = get_username_from_request()
     if not username:
         return jsonify({"success": False, "message": "Chưa đăng nhập!"}), 401
-    orders = get_user_orders(db, username)
+    orders = get_user_orders(db, product_db, username)
     return jsonify({"success": True, "orders": orders})
 
 
 @app.route("/api/products/<int:product_id>/reviews", methods=["GET"])
 def api_get_reviews(product_id):
+    # Lấy reviews từ event_rental.db
     conn = db.connect()
     rows = conn.execute(
         """
-        SELECT r.id, r.username, r.rating, r.comment, r.created_at,
-               p.image as product_image
-        FROM reviews r
-        JOIN products p ON p.id = r.product_id
-        WHERE r.product_id = ?
-        ORDER BY r.created_at DESC
+        SELECT id, username, rating, comment, created_at
+        FROM reviews
+        WHERE product_id = ?
+        ORDER BY created_at DESC
         """,
         (product_id,)
     ).fetchall()
     conn.close()
+
+    # Lấy ảnh sản phẩm từ products.db
+    product = get_product_by_id(product_db, product_id)
+    product_image = product["image"] if product else ""
+
     reviews = [
         {
             "id": row["id"],
@@ -331,7 +479,7 @@ def api_get_reviews(product_id):
             "rating": row["rating"],
             "comment": row["comment"],
             "createdAt": row["created_at"],
-            "productImage": row["product_image"],
+            "productImage": product_image,
         }
         for row in rows
     ]
@@ -381,7 +529,7 @@ def api_post_review(product_id):
             (product_id, username, int(rating), comment)
         )
 
-        # Tính toán lại rating trung bình và cập nhật vào bảng products
+        # Tính toán lại rating trung bình và cập nhật vào products.db
         avg_row = conn.execute(
             "SELECT AVG(rating) FROM reviews WHERE product_id = ?",
             (product_id,)
@@ -389,34 +537,36 @@ def api_post_review(product_id):
         
         if avg_row and avg_row[0] is not None:
             new_avg = round(float(avg_row[0]), 1)
-            conn.execute(
+            p_conn = product_db.connect()
+            p_conn.execute(
                 "UPDATE products SET rating = ? WHERE id = ?",
                 (new_avg, product_id)
             )
+            p_conn.commit()
+            p_conn.close()
 
         conn.commit()
 
         # Trả về review mới kèm thông tin ảnh sản phẩm
         row = conn.execute(
             """
-            SELECT r.id, r.username, r.rating, r.comment, r.created_at,
-                   p.image as product_image
-            FROM reviews r
-            JOIN products p ON p.id = r.product_id
-            WHERE r.product_id = ? AND r.username = ?
-            ORDER BY r.created_at DESC LIMIT 1
+            SELECT id, username, rating, comment, created_at
+            FROM reviews
+            WHERE product_id = ? AND username = ?
+            ORDER BY created_at DESC LIMIT 1
             """,
             (product_id, username)
         ).fetchone()
         conn.close()
 
+        product = get_product_by_id(product_db, product_id)
         review = {
             "id": row["id"],
             "username": row["username"],
             "rating": row["rating"],
             "comment": row["comment"],
             "createdAt": row["created_at"],
-            "productImage": row["product_image"],
+            "productImage": product["image"] if product else "",
         }
         return jsonify({"success": True, "message": "Đã gửi bình luận!", "review": review})
     except Exception as e:
@@ -428,9 +578,16 @@ def api_post_review(product_id):
 
 def check_is_admin(username):
     conn = customer_db.connect()
-    row = conn.execute("SELECT role FROM users WHERE username = ?", (username,)).fetchone()
+    row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     conn.close()
-    return row and row["role"] == "admin"
+    
+    # OOP: Đa hình - Khởi tạo đúng loại object
+    user = User.from_db_row(dict(row) if row else None)
+    if not user:
+        return False
+        
+    # OOP: Đa hình - Gọi hàm has_permission để kiểm tra quyền
+    return user.has_permission("manage_products")
 
 @app.route("/api/admin/products", methods=["POST"])
 def api_admin_add_product():
@@ -445,12 +602,20 @@ def api_admin_add_product():
         image_url = data.get("image", "")
         file = request.files.get("image_file")
         if file and file.filename:
+            if not allowed_file(file.filename):
+                return jsonify({"success": False, "message": "Định dạng file không được hỗ trợ! Chỉ chấp nhận ảnh (png, jpg, jpeg, gif, webp)."}), 400
+            
             import uuid
-            filename = f"{uuid.uuid4().hex}_{file.filename}"
+            safe_filename = secure_filename(file.filename)
+            filename = f"{uuid.uuid4().hex}_{safe_filename}"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            # URL relative to backend
-            image_url = f"http://localhost:5000/uploads/{filename}"
+            
+            try:
+                file.save(file_path)
+                image_url = f"http://localhost:5000/uploads/{filename}"
+            except Exception as e:
+                print(f"Lỗi khi lưu file ảnh: {e}")
+                return jsonify({"success": False, "message": "Lưu file thất bại, file có thể bị hỏng. Vui lòng thử lại!"}), 400
     else:
         data = request.json or {}
         image_url = data.get("image", "")
@@ -468,7 +633,7 @@ def api_admin_add_product():
     except Exception as e:
         print("Lỗi dịch:", e)
         
-    conn = db.connect()
+    conn = product_db.connect()
     try:
         cur = conn.execute(
             """
@@ -507,11 +672,20 @@ def api_admin_update_product(product_id):
         image_url = data.get("image", "")
         file = request.files.get("image_file")
         if file and file.filename:
+            if not allowed_file(file.filename):
+                return jsonify({"success": False, "message": "Định dạng file không được hỗ trợ! Chỉ chấp nhận ảnh (png, jpg, jpeg, gif, webp)."}), 400
+            
             import uuid
-            filename = f"{uuid.uuid4().hex}_{file.filename}"
+            safe_filename = secure_filename(file.filename)
+            filename = f"{uuid.uuid4().hex}_{safe_filename}"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            image_url = f"http://localhost:5000/uploads/{filename}"
+            
+            try:
+                file.save(file_path)
+                image_url = f"http://localhost:5000/uploads/{filename}"
+            except Exception as e:
+                print(f"Lỗi khi lưu file ảnh: {e}")
+                return jsonify({"success": False, "message": "Lưu file thất bại, file có thể bị hỏng. Vui lòng thử lại!"}), 400
     else:
         data = request.json or {}
         image_url = data.get("image", "")
@@ -529,7 +703,7 @@ def api_admin_update_product(product_id):
     except Exception as e:
         print("Lỗi dịch:", e)
         
-    conn = db.connect()
+    conn = product_db.connect()
     try:
         conn.execute(
             """
@@ -565,7 +739,7 @@ def api_admin_delete_product(product_id):
     if not check_is_admin(username):
         return jsonify({"success": False, "message": "Forbidden"}), 403
     
-    conn = db.connect()
+    conn = product_db.connect()
     try:
         conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
         conn.commit()

@@ -26,7 +26,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 # Cho phép chạy trực tiếp từ thư mục này
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from database import Database, CustomerDatabase
+from database import Database, CustomerDatabase, ProductDatabase
 
 # ──────────────────────────────────────────────────────────────
 # Dữ liệu mẫu
@@ -366,37 +366,52 @@ DEMO_WISHLIST = [
 # ──────────────────────────────────────────────────────────────
 # Hàm seed chính
 # ──────────────────────────────────────────────────────────────
-def seed_all(db: Database, customer_db: CustomerDatabase, force: bool = False) -> None:
+def seed_all(db: Database, customer_db: CustomerDatabase, product_db: ProductDatabase = None, force: bool = False) -> None:
     """
     Seed toàn bộ dữ liệu mẫu.
     force=True: xóa dữ liệu cũ và seed lại từ đầu.
+    
+    - product_db: chứa categories + products
+    - db:         chứa cart_items, orders, order_items, reviews, wishlist
+    - customer_db: chứa users
     """
-    conn = db.connect()
-    customer_conn = customer_db.connect()
+    if product_db is None:
+        product_db = ProductDatabase()
+        product_db.init_tables(create_if_missing=True)
+
+    conn = db.connect(create_if_missing=True)
+    customer_conn = customer_db.connect(create_if_missing=True)
+    product_conn = product_db.connect(create_if_missing=True)
 
     try:
-        existing_products = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+        existing_products = product_conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
         if existing_products > 0 and not force:
-            print(f"[seed] Đã có {existing_products} sản phẩm. Bỏ qua. (dùng force=True để seed lại)")
+            print(f"[seed] Da co {existing_products} san pham. Bo qua. (dung force=True de seed lai)")
             return
 
         if force:
-            for tbl in ["reviews", "wishlist", "order_items", "cart_items", "orders", "products", "categories"]:
-                conn.execute(f"DELETE FROM {tbl}")
+            # Xóa dữ liệu cũ trong từng database
+            for tbl in ["products", "categories"]:
+                product_conn.execute(f"DELETE FROM {tbl}")
+            for tbl in ["reviews", "wishlist", "order_items", "cart_items", "orders"]:
+                try:
+                    conn.execute(f"DELETE FROM {tbl}")
+                except Exception:
+                    pass
             customer_conn.execute("DELETE FROM users")
-            print("[seed] Đã xóa dữ liệu cũ.")
+            print("[seed] Da xoa du lieu cu.")
 
-        # ── Danh mục ──────────────────────────────────────────
+        # ── Danh mục (vào products.db) ────────────────────────
         for cat in CATEGORIES:
-            conn.execute(
+            product_conn.execute(
                 "INSERT OR IGNORE INTO categories (id, name, icon) VALUES (?, ?, ?)",
                 (cat["id"], cat["name"], cat["icon"]),
             )
-        print(f"[seed] Đã thêm {len(CATEGORIES)} danh mục.")
+        print(f"[seed] Da them {len(CATEGORIES)} danh muc.")
 
-        # ── Sản phẩm ──────────────────────────────────────────
+        # ── Sản phẩm (vào products.db) ────────────────────────
         for p in PRODUCTS:
-            conn.execute(
+            product_conn.execute(
                 """INSERT OR IGNORE INTO products
                    (id, name, description, price, original_price, discount,
                     sold, stock, rating, location, category_id, is_flash, tags, image, specs)
@@ -411,9 +426,9 @@ def seed_all(db: Database, customer_db: CustomerDatabase, force: bool = False) -
                     json.dumps(p["specs"], ensure_ascii=False),
                 ),
             )
-        print(f"[seed] Đã thêm {len(PRODUCTS)} sản phẩm.")
+        print(f"[seed] Da them {len(PRODUCTS)} san pham.")
 
-        # ── Tài khoản demo ────────────────────────────────────
+        # ── Tài khoản demo (vào customers.db) ─────────────────
         for u in DEMO_USERS:
             hashed = bcrypt.hashpw(u["password"].encode(), bcrypt.gensalt()).decode()
             customer_conn.execute(
@@ -422,30 +437,32 @@ def seed_all(db: Database, customer_db: CustomerDatabase, force: bool = False) -
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (u["username"], hashed, u["email"], u["full_name"], u["phone"], u["role"]),
             )
-        print(f"[seed] Đã thêm {len(DEMO_USERS)} tài khoản demo.")
+        print(f"[seed] Da them {len(DEMO_USERS)} tai khoan demo.")
 
-        # ── Reviews ───────────────────────────────────────────
+        # ── Reviews (vào event_rental.db) ─────────────────────
         for r in DEMO_REVIEWS:
             conn.execute(
                 """INSERT OR IGNORE INTO reviews (product_id, username, rating, comment)
                    VALUES (?, ?, ?, ?)""",
                 (r["product_id"], r["username"], r["rating"], r["comment"]),
             )
-        print(f"[seed] Đã thêm {len(DEMO_REVIEWS)} đánh giá.")
+        print(f"[seed] Da them {len(DEMO_REVIEWS)} danh gia.")
 
-        # ── Wishlist ──────────────────────────────────────────
+        # ── Wishlist (vào event_rental.db) ─────────────────────
         for w in DEMO_WISHLIST:
             conn.execute(
                 "INSERT OR IGNORE INTO wishlist (username, product_id) VALUES (?, ?)",
                 (w["username"], w["product_id"]),
             )
-        print(f"[seed] Đã thêm {len(DEMO_WISHLIST)} wishlist items.")
+        print(f"[seed] Da them {len(DEMO_WISHLIST)} wishlist items.")
 
+        product_conn.commit()
         conn.commit()
         customer_conn.commit()
-        print("[seed] ✅ Seed hoàn tất!")
+        print("[seed] Seed hoan tat!")
 
     finally:
+        product_conn.close()
         conn.close()
         customer_conn.close()
 
@@ -456,11 +473,14 @@ def seed_all(db: Database, customer_db: CustomerDatabase, force: bool = False) -
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="EventRent database seeder")
-    parser.add_argument("--force", action="store_true", help="Xóa và seed lại từ đầu")
+    parser.add_argument("--force", action="store_true", help="Xoa va seed lai tu dau")
     args = parser.parse_args()
 
+    product_db = ProductDatabase()
+    product_db.init_tables(create_if_missing=True)
     db = Database()
-    db.init_tables()
+    db.init_tables(create_if_missing=True)
     customer_db = CustomerDatabase()
-    customer_db.init_tables()
-    seed_all(db, customer_db, force=args.force)
+    customer_db.init_tables(create_if_missing=True)
+    seed_all(db, customer_db, product_db=product_db, force=args.force)
+

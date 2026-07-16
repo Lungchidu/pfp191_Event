@@ -1,23 +1,34 @@
 """
-database.py  –  EventRent unified SQLite manager
-=================================================
-Gộp users.db (auth) và event_rental.db (shop) thành một file DB duy nhất.
-Tương thích ngược với app.py (Flask auth) và shop.py (product/cart/order).
+database.py  –  EventRent unified SQLite manager (OOP Refactored)
+=================================================================
+Kiến trúc 3 database:
+  • products.db   → Chứa bảng categories và products (sản phẩm/danh mục)
+  • event_rental.db → Chứa bảng cart_items, orders, order_items, reviews, wishlist
+  • customers.db  → Chứa bảng users (tài khoản đăng nhập)
 
-Thay đổi chính so với phiên bản cũ:
-  • Một file DB duy nhất: event_rental.db
-  • Bảng users có thêm: email, full_name, phone, role, created_at, is_active
-  • Bảng products có thêm: created_at, updated_at
-  • Bảng orders có thêm: status, note
-  • Bảng mới: order_items (chi tiết từng dòng trong đơn hàng)
-  • Bảng mới: reviews (đánh giá sản phẩm)
-  • Bảng mới: wishlist (sản phẩm yêu thích)
-  • Tất cả câu lệnh dùng parameterized query – an toàn SQL injection
+Áp dụng đầy đủ 4 trụ cột OOP:
+
+  1. Đóng gói (Encapsulation):
+     - Thuộc tính `_db_file` là protected, truy cập qua property `db_path`.
+     - Các method nội bộ `_execute_pragmas()` bắt đầu bằng `_` (private convention).
+
+  2. Trừu tượng (Abstraction):
+     - `BaseDatabase` kế thừa ABC, khai báo @abstractmethod `init_tables()`.
+     - Bắt buộc mọi class con phải tự định nghĩa init_tables().
+
+  3. Kế thừa (Inheritance):
+     - ProductDatabase(BaseDatabase), Database(BaseDatabase), CustomerDatabase(BaseDatabase)
+     - Tái sử dụng connect(), connect_readonly() từ lớp cha.
+
+  4. Đa hình (Polymorphism):
+     - Mỗi class con override init_tables() với logic SQL riêng.
+     - Có thể gọi db.init_tables() trên bất kỳ instance nào mà không cần biết loại DB.
 """
 
 import json
 import os
 import sqlite3
+from abc import ABC, abstractmethod
 from datetime import datetime
 
 # ──────────────────────────────────────────────────────────────
@@ -26,31 +37,99 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE  = os.path.join(BASE_DIR, "event_rental.db")
 CUSTOMER_DB_FILE = os.path.join(BASE_DIR, "customers.db")
+PRODUCT_DB_FILE  = os.path.join(BASE_DIR, "products.db")
 
 
 # ──────────────────────────────────────────────────────────────
-# Lớp Database
+# Lớp cha trừu tượng: BaseDatabase (Abstract Base Class)
 # ──────────────────────────────────────────────────────────────
-class Database:
-    """Quản lý kết nối SQLite dùng chung cho toàn ứng dụng."""
+class BaseDatabase(ABC):
+    """Lớp cha trừu tượng cho tất cả các database manager.
 
-    def __init__(self, db_file: str = DB_FILE):
-        self.db_file = db_file
+    Đóng gói (Encapsulation):
+        - `_db_file` là thuộc tính protected, truy cập qua property `db_path`.
+        - `_execute_pragmas()` là method nội bộ, không gọi từ bên ngoài.
 
-    # ── kết nối ──────────────────────────────────────────────
-    def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_file)
+    Trừu tượng (Abstraction):
+        - Kế thừa ABC, khai báo @abstractmethod `init_tables()`.
+        - Cung cấp interface chung: connect(), connect_readonly().
+        - Ẩn đi chi tiết kết nối SQLite, PRAGMA, URI mode bên trong.
+
+    Kế thừa (Inheritance):
+        - Các class con (ProductDatabase, Database, CustomerDatabase) kế thừa
+          toàn bộ logic kết nối mà không cần viết lại.
+
+    Đa hình (Polymorphism):
+        - Mỗi class con override init_tables() với logic SQL riêng.
+    """
+
+    def __init__(self, db_file: str):
+        self._db_file = db_file    # ← Đóng gói: thuộc tính protected
+
+    @property
+    def db_path(self) -> str:
+        """Trả về đường dẫn database file (read-only property).
+        Đóng gói: chỉ cho phép đọc, không cho phép gán trực tiếp."""
+        return self._db_file
+
+    def _execute_pragmas(self, conn: sqlite3.Connection) -> None:
+        """Thiết lập PRAGMA mặc định cho kết nối.
+        Đóng gói: method nội bộ, bắt đầu bằng `_` (private convention)."""
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+
+    def connect(self, create_if_missing: bool = False) -> sqlite3.Connection:
+        """Kết nối Read-Write đến database.
+        Trừu tượng: ẩn đi chi tiết URI mode, PRAGMA config bên trong."""
+        if create_if_missing:
+            conn = sqlite3.connect(self._db_file)
+        else:
+            uri = f"file:{self._db_file}?mode=rw"
+            conn = sqlite3.connect(uri, uri=True)
+
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")   # bật ràng buộc FK
-        conn.execute("PRAGMA journal_mode = WAL")  # tốt hơn cho nhiều reader
+        self._execute_pragmas(conn)
         return conn
 
-    # ── khởi tạo schema ──────────────────────────────────────
-    def init_tables(self) -> None:
-        conn = self.connect()
-        try:
-            # ── Tài khoản người dùng (đã chuyển sang customers.db) ──
+    def connect_readonly(self) -> sqlite3.Connection:
+        """Kết nối Read-Only đến database.
+        Nếu file chưa tồn tại sẽ báo lỗi thay vì tự tạo file rỗng."""
+        uri = f"file:{self._db_file}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        conn.row_factory = sqlite3.Row
+        return conn
 
+    @abstractmethod
+    def init_tables(self, create_if_missing: bool = False) -> None:
+        """Khởi tạo các bảng trong database.
+        Trừu tượng: @abstractmethod — bắt buộc mọi class con phải tự định nghĩa.
+        Đa hình: mỗi class con sẽ override với logic SQL riêng."""
+        pass
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} db='{os.path.basename(self._db_file)}'>"
+
+
+# ──────────────────────────────────────────────────────────────
+# Lớp con: ProductDatabase – Riêng cho sản phẩm & danh mục
+# ──────────────────────────────────────────────────────────────
+class ProductDatabase(BaseDatabase):
+    """Quản lý kết nối SQLite riêng cho sản phẩm và danh mục.
+
+    Kế thừa (Inheritance):
+        - Tái sử dụng connect(), connect_readonly(), _execute_pragmas() từ BaseDatabase.
+
+    Đa hình (Polymorphism):
+        - Override init_tables() với logic tạo bảng categories và products.
+    """
+
+    def __init__(self, db_file: str = PRODUCT_DB_FILE):
+        super().__init__(db_file)    # ← Kế thừa: gọi __init__ của BaseDatabase
+
+    def init_tables(self, create_if_missing: bool = False) -> None:
+        """Đa hình: Override init_tables() — tạo bảng categories và products."""
+        conn = self.connect(create_if_missing=create_if_missing)
+        try:
             # ── Danh mục sản phẩm ─────────────────────────────────────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS categories (
@@ -77,9 +156,9 @@ class Database:
                     location       TEXT    NOT NULL DEFAULT '',
                     category_id    INTEGER NOT NULL DEFAULT 1,
                     is_flash       INTEGER NOT NULL DEFAULT 0,
-                    tags           TEXT    NOT NULL DEFAULT '[]',   -- JSON array
+                    tags           TEXT    NOT NULL DEFAULT '[]',
                     image          TEXT    NOT NULL DEFAULT '',
-                    specs          TEXT    NOT NULL DEFAULT '[]',   -- JSON array
+                    specs          TEXT    NOT NULL DEFAULT '[]',
                     created_at     TEXT    DEFAULT (datetime('now','localtime')),
                     updated_at     TEXT    DEFAULT (datetime('now','localtime')),
                     FOREIGN KEY (category_id) REFERENCES categories(id)
@@ -91,8 +170,33 @@ class Database:
                 conn.execute("ALTER TABLE products ADD COLUMN name_en TEXT DEFAULT ''")
                 conn.execute("ALTER TABLE products ADD COLUMN description_en TEXT DEFAULT ''")
             except Exception:
-                pass # Column already exists
+                pass  # Column already exists
 
+            conn.commit()
+        finally:
+            conn.close()
+
+
+# ──────────────────────────────────────────────────────────────
+# Lớp con: Database – Đơn hàng, giỏ hàng, đánh giá, wishlist
+# ──────────────────────────────────────────────────────────────
+class Database(BaseDatabase):
+    """Quản lý kết nối SQLite cho event_rental.db (đơn hàng, giỏ, reviews).
+
+    Kế thừa (Inheritance):
+        - Tái sử dụng connect(), connect_readonly() từ BaseDatabase.
+
+    Đa hình (Polymorphism):
+        - Override init_tables() với logic tạo bảng cart, orders, reviews, wishlist.
+    """
+
+    def __init__(self, db_file: str = DB_FILE):
+        super().__init__(db_file)    # ← Kế thừa: gọi __init__ của BaseDatabase
+
+    def init_tables(self, create_if_missing: bool = False) -> None:
+        """Đa hình: Override init_tables() — tạo bảng cart, orders, reviews, wishlist."""
+        conn = self.connect(create_if_missing=create_if_missing)
+        try:
             # ── Giỏ hàng ──────────────────────────────────────────────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS cart_items (
@@ -100,8 +204,7 @@ class Database:
                     product_id INTEGER NOT NULL,
                     quantity   INTEGER NOT NULL DEFAULT 1,
                     days       INTEGER NOT NULL DEFAULT 1,
-                    PRIMARY KEY (username, product_id),
-                    FOREIGN KEY (product_id) REFERENCES products(id)      ON DELETE CASCADE
+                    PRIMARY KEY (username, product_id)
                 )
             """)
 
@@ -111,59 +214,32 @@ class Database:
                     id            INTEGER PRIMARY KEY AUTOINCREMENT,
                     username      TEXT    NOT NULL,
                     total         INTEGER NOT NULL DEFAULT 0,
-                    status        TEXT    NOT NULL DEFAULT 'pending',
+                    status        TEXT    NOT NULL DEFAULT 'completed',
                     note          TEXT    DEFAULT '',
                     delivery_date TEXT    DEFAULT '',
                     created_at    TEXT    DEFAULT (datetime('now','localtime'))
                 )
             """)
-            
+
             # Migration: add delivery_date to existing orders table if not exists
             try:
                 conn.execute("ALTER TABLE orders ADD COLUMN delivery_date TEXT DEFAULT ''")
             except Exception:
-                pass # Column already exists
+                pass  # Column already exists
 
             # ── Chi tiết đơn hàng ─────────────────────────────────────
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS order_items (
                     id           INTEGER PRIMARY KEY AUTOINCREMENT,
                     order_id     INTEGER NOT NULL,
-                    product_id   INTEGER,           -- nullable: sản phẩm có thể bị xóa
-                    product_name TEXT    NOT NULL,   -- snapshot tên lúc đặt
-                    price        INTEGER NOT NULL,   -- snapshot giá lúc đặt
+                    product_id   INTEGER,
+                    product_name TEXT    NOT NULL,
+                    price        INTEGER NOT NULL,
                     quantity     INTEGER NOT NULL DEFAULT 1,
                     days         INTEGER NOT NULL DEFAULT 1,
-                    FOREIGN KEY (order_id)   REFERENCES orders(id)   ON DELETE CASCADE,
-                    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+                    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
                 )
             """)
-
-            # ── Migration: nếu bảng cũ có product_id NOT NULL → recreate ──────
-            col_info = conn.execute("PRAGMA table_info(order_items)").fetchall()
-            pid_col = next((c for c in col_info if c["name"] == "product_id"), None)
-            if pid_col and pid_col["notnull"] == 1:
-                conn.execute("ALTER TABLE order_items RENAME TO order_items_old")
-                conn.execute("""
-                    CREATE TABLE order_items (
-                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                        order_id     INTEGER NOT NULL,
-                        product_id   INTEGER,
-                        product_name TEXT    NOT NULL,
-                        price        INTEGER NOT NULL,
-                        quantity     INTEGER NOT NULL DEFAULT 1,
-                        days         INTEGER NOT NULL DEFAULT 1,
-                        FOREIGN KEY (order_id)   REFERENCES orders(id)   ON DELETE CASCADE,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
-                    )
-                """)
-                conn.execute("""
-                    INSERT INTO order_items
-                        (id, order_id, product_id, product_name, price, quantity, days)
-                    SELECT id, order_id, product_id, product_name, price, quantity, days
-                    FROM order_items_old
-                """)
-                conn.execute("DROP TABLE order_items_old")
 
             # ── Đánh giá sản phẩm ─────────────────────────────────────
             conn.execute("""
@@ -174,8 +250,7 @@ class Database:
                     rating     INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
                     comment    TEXT    DEFAULT '',
                     created_at TEXT    DEFAULT (datetime('now','localtime')),
-                    UNIQUE (product_id, username),
-                    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                    UNIQUE (product_id, username)
                 )
             """)
 
@@ -185,8 +260,7 @@ class Database:
                     username   TEXT    NOT NULL,
                     product_id INTEGER NOT NULL,
                     added_at   TEXT    DEFAULT (datetime('now','localtime')),
-                    PRIMARY KEY (username, product_id),
-                    FOREIGN KEY (product_id) REFERENCES products(id)     ON DELETE CASCADE
+                    PRIMARY KEY (username, product_id)
                 )
             """)
 
@@ -196,23 +270,24 @@ class Database:
 
 
 # ──────────────────────────────────────────────────────────────
-# Lớp CustomerDatabase
+# Lớp con: CustomerDatabase
 # ──────────────────────────────────────────────────────────────
-class CustomerDatabase:
-    """Quản lý kết nối SQLite riêng cho khách hàng."""
+class CustomerDatabase(BaseDatabase):
+    """Quản lý kết nối SQLite riêng cho khách hàng.
+
+    Kế thừa (Inheritance):
+        - Tái sử dụng connect(), connect_readonly() từ BaseDatabase.
+
+    Đa hình (Polymorphism):
+        - Override init_tables() với logic tạo bảng users.
+    """
 
     def __init__(self, db_file: str = CUSTOMER_DB_FILE):
-        self.db_file = db_file
+        super().__init__(db_file)    # ← Kế thừa: gọi __init__ của BaseDatabase
 
-    def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_file)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        return conn
-
-    def init_tables(self) -> None:
-        conn = self.connect()
+    def init_tables(self, create_if_missing: bool = False) -> None:
+        """Đa hình: Override init_tables() — tạo bảng users."""
+        conn = self.connect(create_if_missing=create_if_missing)
         try:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -221,11 +296,22 @@ class CustomerDatabase:
                     email      TEXT    DEFAULT '',
                     full_name  TEXT    DEFAULT '',
                     phone      TEXT    DEFAULT '',
+                    birth_year INTEGER DEFAULT 0,
+                    address    TEXT    DEFAULT '',
                     role       TEXT    DEFAULT 'customer',
                     is_active  INTEGER DEFAULT 1,
                     created_at TEXT    DEFAULT (datetime('now','localtime'))
                 )
             """)
+            # Migration: add birth_year and address to existing users table if not exists
+            try:
+                conn.execute("ALTER TABLE users ADD COLUMN birth_year INTEGER DEFAULT 0")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE users ADD COLUMN address TEXT DEFAULT ''")
+            except Exception:
+                pass
             conn.commit()
         finally:
             conn.close()
@@ -268,14 +354,17 @@ def row_to_category(row: sqlite3.Row) -> dict:
 
 def row_to_user(row: sqlite3.Row) -> dict:
     """Trả về thông tin user – KHÔNG bao gồm password."""
+    d = dict(row)
     return {
-        "username":  row["username"],
-        "email":     row["email"],
-        "fullName":  row["full_name"],
-        "phone":     row["phone"],
-        "role":      row["role"],
-        "isActive":  bool(row["is_active"]),
-        "createdAt": row["created_at"],
+        "username":  d.get("username"),
+        "email":     d.get("email"),
+        "fullName":  d.get("full_name", ""),
+        "phone":     d.get("phone", ""),
+        "birthYear": d.get("birth_year", 0),
+        "address":    d.get("address", ""),
+        "role":      d.get("role"),
+        "isActive":  bool(d.get("is_active")),
+        "createdAt": d.get("created_at"),
     }
 
 

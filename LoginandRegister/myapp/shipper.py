@@ -22,6 +22,7 @@ Cách dùng độc lập:
 import sqlite3
 import os
 from datetime import datetime
+from database import BaseDatabase
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE  = os.path.join(BASE_DIR, "event_rental.db")
@@ -67,24 +68,26 @@ NEXT_STATUSES = {
 
 
 # ──────────────────────────────────────────────────────────────
-# ShipperDB
+# ShipperDB – Kế thừa từ BaseDatabase
 # ──────────────────────────────────────────────────────────────
-class ShipperDB:
-    """Toàn bộ thao tác DB liên quan đến shipper và giao hàng."""
+class ShipperDB(BaseDatabase):
+    """Toàn bộ thao tác DB liên quan đến shipper và giao hàng.
+
+    Kế thừa (Inheritance):
+        - Tái sử dụng connect(), connect_readonly(), _execute_pragmas() từ BaseDatabase.
+
+    Đa hình (Polymorphism):
+        - Override init_tables() với logic tạo bảng shippers, deliveries, delivery_logs,
+          delivery_locations.
+    """
 
     def __init__(self, db_file: str = DB_FILE):
-        self.db_file = db_file
-
-    # ── kết nối ──────────────────────────────────────────────
-    def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_file)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        super().__init__(db_file)    # ← Kế thừa: gọi __init__ của BaseDatabase
 
     # ── khởi tạo bảng ────────────────────────────────────────
-    def init_tables(self) -> None:
-        conn = self.connect()
+    def init_tables(self, create_if_missing: bool = False) -> None:
+        """Đa hình: Override init_tables() — tạo bảng shippers, deliveries, logs, locations."""
+        conn = self.connect(create_if_missing=create_if_missing)
         try:
             # ── Hồ sơ shipper ─────────────────────────────────────────
             conn.execute("""
