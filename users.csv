@@ -1,0 +1,3 @@
+username,password,role,full_name,email
+admin,admin123,admin,Administrator,admin@event.com
+testuser2,e8779e0367b50fdf6f2b1d77fef879df92dcaafc3e5ef0a3b6e3867eccd2fd74,user,Tran Van D,trand@gmail.com

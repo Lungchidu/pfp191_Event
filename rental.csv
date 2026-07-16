@@ -1,0 +1,3 @@
+rental_id,client_name,start_time,expected_return_time,equipment_ids
+R001,Nguyen Van A,2026-07-16,2026-07-18,EQ003
+R002,Tran Thi B,2026-07-15,2026-07-17,EQ005;EQ009
