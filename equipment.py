@@ -33,6 +33,10 @@ class Equipment:
         return self._current_status
 
     # Setters
+    @name.setter
+    def name(self, value):
+        self._name = str(value)
+
     @power_rating.setter
     def power_rating(self, value):
         self._power_rating = float(value)

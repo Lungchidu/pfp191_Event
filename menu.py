@@ -66,18 +66,37 @@ class EventRentalApp:
         # Hiển thị thông tin hiện tại
         print("Current details: " + str(eq))
         
-        try:
-            new_power = input("Enter new Power Rating (press enter to skip): ").strip()
-            if new_power:
-                eq.power_rating = float(new_power)
-                
-            new_rate = input("Enter new Hourly Rental Rate (press enter to skip): ").strip()
-            if new_rate:
-                eq.hourly_rental_rate = float(new_rate)
-                
-            print("Equipment updated successfully!")
-        except ValueError as e:
-            print("Invalid input: " + str(e))
+        print("\n1. Edit Equipment (Name, Power, Rate)")
+        print("2. Delete Equipment")
+        print("3. Cancel")
+        choice = input("Enter choice: ").strip()
+        
+        if choice == '1':
+            try:
+                new_name = input("Enter new Name (press enter to skip): ").strip()
+                if new_name:
+                    eq.name = new_name
+                    
+                new_power = input("Enter new Power Rating (press enter to skip): ").strip()
+                if new_power:
+                    eq.power_rating = float(new_power)
+                    
+                new_rate = input("Enter new Hourly Rental Rate (press enter to skip): ").strip()
+                if new_rate:
+                    eq.hourly_rental_rate = float(new_rate)
+                    
+                print("Equipment updated successfully!")
+            except ValueError as e:
+                print("Invalid input: " + str(e))
+        elif choice == '2':
+            confirm = input(f"Are you sure you want to delete '{eq.name}'? (Y/N): ").strip().upper()
+            if confirm == 'Y':
+                del self.equipment_dict[eq.equipment_id]
+                print("Equipment deleted successfully!")
+            else:
+                print("Deletion cancelled.")
+        else:
+            print("Operation cancelled.")
 
     def search_equipment(self):
         print("\n--- Search Equipment ---")
